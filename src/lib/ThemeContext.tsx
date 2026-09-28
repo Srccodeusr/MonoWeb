@@ -59,7 +59,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   });
 
   const [activeFontId, setActiveFontIdState] = useState<string>(() => {
-    return localStorage.getItem('aether_active_font_id') || 'Plus Jakarta Sans';
+    return localStorage.getItem('aether_active_font_id') || 'Quicksand';
   });
 
   const [accent, setAccentState] = useState<AccentColor>(() => {
@@ -364,7 +364,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           bg: 'bg-cyan-500',
           border: 'border-cyan-500/30',
           ring: 'focus:ring-cyan-500/50',
-          gradient: 'from-cyan-500 to-blue-600',
+          gradient: 'from-blue-500 to-blue-700',
           shadow: 'shadow-cyan-500/20'
         };
       case 'cyberpunk':
@@ -382,7 +382,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           bg: 'bg-red-500',
           border: 'border-red-500/30',
           ring: 'focus:ring-red-500/50',
-          gradient: 'from-rose-500 via-red-600 to-amber-600',
+          gradient: 'from-rose-500 via-red-600 to-red-700',
           shadow: 'shadow-red-500/20'
         };
       case 'sapphire':
@@ -401,8 +401,10 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           bg: 'bg-amber-500',
           border: 'border-amber-500/30',
           ring: 'focus:ring-amber-500/50',
-          gradient: 'from-amber-500 via-yellow-500 to-amber-600',
-          shadow: 'shadow-amber-500/20'
+          // Solid black-to-black pill (not the light end of the ramp) so the
+          // text-white labels used alongside this everywhere stay legible.
+          gradient: 'from-zinc-950 via-black to-zinc-900',
+          shadow: 'shadow-black/40'
         };
     }
   };

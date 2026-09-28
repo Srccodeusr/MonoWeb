@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { apiRequest } from './api';
-import { SocialLinks } from '../types';
+import { SocialLinks, QuickLink } from '../types';
 
 interface BrandingContextType {
   brandName: string;
@@ -13,6 +13,7 @@ interface BrandingContextType {
   pageAnimationsEnabled: boolean;
   heroDescription: string;
   footerDescription: string;
+  quickLinks: QuickLink[];
   refreshBranding: () => Promise<void>;
   updateBrandNameLocally: (newName: string) => void;
   setPageAnimationsEnabledLocally: (enabled: boolean) => void;
@@ -53,6 +54,7 @@ export const BrandingProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   });
   const [heroDescription, setHeroDescription] = useState<string>(DEFAULT_HERO_DESCRIPTION);
   const [footerDescription, setFooterDescription] = useState<string>(DEFAULT_FOOTER_DESCRIPTION);
+  const [quickLinks, setQuickLinks] = useState<QuickLink[]>([]);
 
   const fetchBranding = useCallback(async () => {
     try {
@@ -87,6 +89,9 @@ export const BrandingProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           setFooterDescription(res.data.footerDescription);
         } else {
           setFooterDescription(DEFAULT_FOOTER_DESCRIPTION);
+        }
+        if (Array.isArray(res.data.quickLinks)) {
+          setQuickLinks(res.data.quickLinks);
         }
       }
     } catch (err) {
@@ -145,6 +150,7 @@ export const BrandingProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         pageAnimationsEnabled,
         heroDescription,
         footerDescription,
+        quickLinks,
         refreshBranding: fetchBranding,
         updateBrandNameLocally,
         setPageAnimationsEnabledLocally,

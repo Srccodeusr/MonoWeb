@@ -17,18 +17,18 @@ export interface ThemePreset {
 export const THEME_PRESETS: ThemePreset[] = [
   {
     id: 'golden',
-    name: 'MonoNode Orange (Default)',
-    description: 'The signature MonoNode dark palette with high-contrast engineering-orange highlights.',
-    accent: '#ff6a1a',
-    accentHover: '#ee5208',
+    name: 'MonoNode Black & White (Default)',
+    description: 'The signature MonoNode dark palette with crisp, high-contrast black & white highlights.',
+    accent: '#ffffff',
+    accentHover: '#e4e4e7',
     bgBase: '#0a0a0b',
     bgCard: '#131316',
-    borderColor: 'rgba(255, 106, 26, 0.25)',
-    badgeBg: 'rgba(255, 106, 26, 0.15)',
-    badgeText: '#ff8a3d',
-    gradient: 'from-orange-500 via-amber-500 to-orange-600',
-    glowColor: 'rgba(255, 106, 26, 0.3)',
-    previewColors: ['#0a0a0b', '#131316', '#ff6a1a', '#ff8a3d']
+    borderColor: 'rgba(255, 255, 255, 0.18)',
+    badgeBg: 'rgba(255, 255, 255, 0.10)',
+    badgeText: '#f4f4f5',
+    gradient: 'from-zinc-950 via-black to-zinc-900',
+    glowColor: 'rgba(255, 255, 255, 0.18)',
+    previewColors: ['#0a0a0b', '#131316', '#ffffff', '#f4f4f5']
   },
   {
     id: 'emerald',
@@ -117,8 +117,22 @@ export interface FontOption {
 
 export const FONT_OPTIONS: FontOption[] = [
   {
+    id: 'Quicksand',
+    name: 'Quicksand (Default)',
+    category: 'sans',
+    fontFamily: '"Quicksand", sans-serif',
+    sample: 'Sphinx of black quartz, judge my vow.'
+  },
+  {
+    id: 'Chakra Petch',
+    name: 'Chakra Petch',
+    category: 'display',
+    fontFamily: '"Chakra Petch", sans-serif',
+    sample: 'Chamfered, technical MonoNode display type.'
+  },
+  {
     id: 'Plus Jakarta Sans',
-    name: 'Plus Jakarta Sans (Default)',
+    name: 'Plus Jakarta Sans',
     category: 'sans',
     fontFamily: '"Plus Jakarta Sans", sans-serif',
     sample: 'Sphinx of black quartz, judge my vow.'
