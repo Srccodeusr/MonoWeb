@@ -1,89 +1,220 @@
-# Platform Website (Trimmed from AetherPanel)
+<div align="center">
 
-This is a stripped-down build of the original AetherPanel game-server hosting
-panel. It keeps the **public marketing website**, **billing system**, and
-**admin panel**, and removes the **customer-facing game server management**
-features (server console, file manager, deploy wizard, SFTP, backups, node
-provisioning) along with all backend infrastructure that supported them
-(node agent, console websocket, SFTP daemon, scheduler, Playit tunnel
-integration, database-host provisioning).
+# MonoWeb
 
-## What's included
+**The website, billing system and admin panel behind MonoNode — Discord Bot Hosting & VPS Hosting.**
 
-- **Public site**: Home, Minecraft Hosting, Bot Hosting, Pricing, Status,
-  Docs, Legal pages
-- **Auth**: Login, Register (email/password, Google, Discord OAuth)
-- **Customer account**: Dashboard (account overview), Billing (credits,
-  orders, coupons, manual + instant payment methods), Support Tickets,
-  Activity Log, Account Settings (profile, password, Discord link, webhooks)
-- **Admin panel**: System Overview, User Accounts, Products & Plans, Orders
-  & Billing, Coupons, Announcements, Ad Campaigns, Discord Integration,
-  Fonts & Themes, Support Queue, Audit Trail, REST API Keys, Legal &
-  Policies, Platform Settings (general, auth providers, anti-abuse,
-  payments, pending approvals)
-- **Status page**: incident tracking and scheduled maintenance, backed by
-  static core components (Website, API, Database, Payments, Discord,
-  Support) rather than live server/node telemetry
+Black & white. Fast. Built to be run and edited by the people who host on it.
 
-## What was removed
+![License](https://img.shields.io/badge/license-MIT-white?style=flat-square&labelColor=000000)
+![React](https://img.shields.io/badge/React-19-white?style=flat-square&labelColor=000000)
+![TypeScript](https://img.shields.io/badge/TypeScript-5.8-white?style=flat-square&labelColor=000000)
+![Tailwind](https://img.shields.io/badge/Tailwind-4-white?style=flat-square&labelColor=000000)
+![PRs](https://img.shields.io/badge/PRs-welcome-white?style=flat-square&labelColor=000000)
 
-- Customer server management panel (server list, console, file manager,
-  deploy wizard, backups, databases, schedules, subusers)
-- Node/allocation admin pages (Compute Nodes, Server Types, Monitoring,
-  System Diagnostics, Backups & Storage)
-- AFK Rewards (a server-uptime gamification feature with no purpose once
-  there are no hosted servers to keep alive)
-- Backend: node agent, console websocket server, SFTP server, task
-  scheduler, Playit.gg tunnel integration, network protection service,
-  database-host provisioning service, panel self-update pipeline
-- Discord bot's per-server slash commands (`/server start|stop|restart`,
-  etc.) — the bot now only handles account linking and account/billing
-  notifications via a single default webhook
+</div>
 
-## Before you deploy
+---
 
-**This sandbox has no network access, so `npm install` and a real
-TypeScript build (`tsc --noEmit` / `vite build`) were never run here.**
-Everything was verified with static analysis (import/export resolution
-across all 73 source files, structural diffing against the original
-codebase for files that were trimmed via line-range extraction), which
-caught and fixed two real bugs (missing `DEFAULT_HERO_DESCRIPTION` /
-`DEFAULT_FOOTER_DESCRIPTION` constants in `AdminSettings.tsx`). Still,
-please run the following before deploying:
+## What is MonoWeb?
+
+MonoWeb is the full-stack web platform for **MonoNode**. It gives you a public marketing site, customer accounts, a billing and order system, a support desk, an in-dashboard mail inbox, and a complete admin panel — all in one repo, with no external database to set up.
+
+It sells exactly two products:
+
+- **Discord Bot Hosting**
+- **VPS Hosting**
+
+MonoWeb started from the open-source AetherPanel codebase by Ym0T (MIT licensed). It has since been re-themed, re-branded and extended, and it no longer includes any game-server management. It is the *website and billing side* of a hosting business, not a server control panel.
+
+---
+
+## Features
+
+### Public website
+- Fully redesigned **black & white home page** with a ticker, product cards, infrastructure section, stats and FAQ
+- Product cards pull their **prices and feature lists from your real plans**, so the site never drifts out of sync with what you sell
+- Dedicated **Bot Hosting**, **VPS Hosting** and **Pricing** pages
+- **Status page** with incident tracking and scheduled maintenance
+- **Docs** page and editable **legal pages** (Terms, Privacy, etc.)
+
+### Accounts & authentication
+- Email + password sign-up and login
+- **Google** sign-in (via Firebase) and **Discord** OAuth — both optional
+- Role system: `user`, `support`, `moderator`, `admin`, `super_admin`
+- JWT sessions, hashed passwords, API rate limiting and a CORS allow-list
+- Optional VPN/proxy blocking to reduce abuse
+
+### Customer dashboard
+- Account overview, **Billing**, **Checkout**, **Support Tickets**, **Mail**, **Activity Log** and **Settings**
+- Account credits, order history and **coupon** redemption
+- Link a Discord account and configure webhooks
+- **Quick Links** in the sidebar — one-click shortcuts to whatever you choose (see below)
+
+### Billing
+- Pay with **UPI, bank transfer, crypto or gift cards**
+- Every manual payment is **verified by staff before credits are added**, so nothing is granted on trust
+- Coupons, orders and pending approvals managed from the admin panel
+- Instant card payments are **not** available — the Stripe toggle exists as a placeholder only and is blocked server-side until a real processor is integrated
+
+### Mail
+A built-in inbox so you can message customers without leaving the platform.
+- Staff (`support`, `moderator`, `admin`, `super_admin`) can send a message to **one user** or **broadcast to everyone**
+- Customers get an inbox with an **unread counter**, mark-all-read and delete
+- Admins see every sent message with **read receipts** (e.g. `12/40 read`), grouped per broadcast
+
+### Panel Link & Quick Links
+- Admin → **Panel Link** lets you add, edit and remove **Quick Links** (label + URL, up to 12) — for example a Discord bot panel, a VPS panel or a status page
+- Links that have a URL appear in every customer's dashboard sidebar and open in a new tab
+- Optional **auto-provisioning** (Pterodactyl / Pelican-compatible panel via API) is still available under *Advanced*, and is off by default
+
+### Themes & fonts
+- Ships with the **MonoNode Black & White** theme as the default
+- **Chakra Petch** for headings and the logo, **Quicksand** for body text
+- Switch themes and fonts from Admin → **Appearance**
+
+### Admin panel
+System overview · Users · Products & Plans · Orders & Billing · Coupons · Announcements · Ad campaigns · Discord integration · Appearance · Support queue · Mail · Audit trail · REST API keys · Legal & policies · Platform settings · Panel Link
+
+### Discord integration
+- Account linking and account/billing notifications through a Discord bot and webhooks (optional)
+
+---
+
+## Tech stack
+
+| Layer | Tools |
+| --- | --- |
+| Frontend | React 19, TypeScript, Vite 6, Tailwind CSS 4, Motion, Lucide icons |
+| Backend | Node.js, Express 4, TypeScript (run with `tsx`) |
+| Storage | Local JSON file database (`data/db.json`) — no database server needed |
+| Auth | JSON Web Tokens, bcryptjs, Firebase (Google sign-in), Discord OAuth2 |
+| Integrations | discord.js 14 |
+
+---
+
+## Getting started
+
+### Requirements
+- **Node.js 18 or newer**
+- npm
+
+### 1. Clone and install
 
 ```bash
+git clone https://github.com/<your-username>/MonoWeb.git
+cd MonoWeb
 npm install
-npm run lint     # tsc --noEmit — catches anything static analysis couldn't
-npm run dev      # smoke-test locally
-npm run build    # production build
 ```
 
-Fix any TypeScript errors that surface — static analysis can't catch
-everything a real compiler will (e.g. subtle type mismatches).
+### 2. Configure
 
-## Configuration
+```bash
+cp .env.example .env
+```
 
-Copy `.env.example` to `.env` and fill in:
+Open `.env` and set at least these three values **before the first start**:
 
-- `JWT_SECRET` — required, used to sign auth tokens
-- `AETHER_ADMIN_EMAIL` / `AETHER_ADMIN_PASSWORD` — bootstrap super-admin
-  account, created automatically on first run
-- Discord OAuth + bot credentials (optional, needed for Discord login and
-  notifications)
-- Firebase credentials (optional, needed for Google login)
-- `VPN_CHECK_API_KEY` (optional, needed for the anti-abuse IP risk checks)
+```env
+JWT_SECRET="a-long-random-string"
+AETHER_ADMIN_EMAIL="you@yourdomain.com"
+AETHER_ADMIN_PASSWORD="a-strong-password"
+```
 
-## Known gaps to review
+> **Important:** if `AETHER_ADMIN_EMAIL` / `AETHER_ADMIN_PASSWORD` are not set, the first-run admin account falls back to built-in default credentials. Always set your own.
 
-- **Seed data**: the original `data/db.json` had richer sample data
-  (specific coupon codes, sample support tickets, etc.) than what's seeded
-  in the new `db.ts` defaults. The new defaults include the real product
-  catalog (2 products, 10 pricing plans) and settings, but not sample
-  orders/tickets. The app creates its own `data/db.json` on first run and
-  will self-seed from the defaults in `server/db.ts`.
-- **Payment methods**: UPI, bank transfer, and crypto payment instructions
-  in `db.ts`'s default settings are placeholder values — update them from
-  the Admin → Platform Settings → Payments tab before going live.
-- **Branding**: default brand name/tagline/hero copy reference "AetherPanel"
-  as a placeholder — update from Admin → Platform Settings → General, or
-  edit the defaults directly in `server/db.ts`.
+### 3. Run in development
+
+```bash
+npm run dev
+```
+
+Open **http://localhost:3000** and sign in with the admin account from your `.env`.
+
+### 4. Build and run in production
+
+```bash
+npm run build
+npm start
+```
+
+The server listens on port **3000**. Put it behind a reverse proxy (Nginx, Caddy, etc.) for HTTPS, and set `APP_URL` and `ALLOWED_ORIGINS` to your public domain.
+
+### Scripts
+
+| Command | What it does |
+| --- | --- |
+| `npm run dev` | Starts the API and the Vite dev server together |
+| `npm run build` | Builds the frontend and bundles the server into `dist/` |
+| `npm start` | Runs the production build |
+| `npm run lint` | Type-checks the whole project (`tsc --noEmit`) |
+| `npm run clean` | Removes build output |
+
+---
+
+## Environment variables
+
+| Variable | Required | Description |
+| --- | --- | --- |
+| `JWT_SECRET` | Yes | Secret used to sign login tokens. Use a long random value. |
+| `AETHER_ADMIN_EMAIL` | Yes | Email of the first super admin created on first start. |
+| `AETHER_ADMIN_PASSWORD` | Yes | Password of the first super admin. |
+| `AETHER_INSTALLATION_ID` / `AETHER_INSTALLATION_SECRET` | No | Identity keys for this installation. |
+| `APP_URL` | Yes (prod) | Public URL of your site, used for OAuth callbacks. |
+| `ALLOWED_ORIGINS` | Yes (prod) | Comma-separated list of allowed CORS origins. |
+| `TRUST_PROXY` | No | Set to `false` if you are not behind a reverse proxy. |
+| `VPN_CHECK_API_KEY` | No | Key for the VPN/proxy detection provider. |
+| `DISCORD_CLIENT_ID` / `DISCORD_CLIENT_SECRET` / `DISCORD_REDIRECT_URI` | No | Enables Discord OAuth login. |
+| `DISCORD_BOT_TOKEN` | No | Enables the Discord bot integration. |
+| `VITE_FIREBASE_*` | No | Firebase web-app credentials for Google sign-in. |
+| `NODE_ENV` | No | `development` or `production`. |
+
+---
+
+## Project structure
+
+```text
+MonoWeb/
+├── server.ts                # Express entry point (API + Vite middleware)
+├── server/
+│   ├── db.ts                # JSON database, defaults and migrations
+│   ├── auth.ts              # Auth middleware and role checks
+│   ├── discordService.ts    # Discord bot
+│   ├── webhookService.ts    # Outgoing webhooks
+│   └── routes/              # admin, auth, billing, mail, support, status, public, ...
+├── src/
+│   ├── App.tsx              # Page routing and layout
+│   ├── index.css            # Theme tokens: fonts and the black & white colour ramp
+│   ├── types.ts             # Shared TypeScript types
+│   ├── components/          # Navbar, Footer, Sidebar, logo, ...
+│   ├── lib/                 # Theme, branding and auth contexts, API helper
+│   └── pages/
+│       ├── public/          # Home, Bot Hosting, VPS Hosting, Pricing, Status, Docs
+│       ├── auth/            # Login, Register
+│       ├── customer/        # Dashboard, Billing, Checkout, Mail, Tickets, Settings
+│       └── admin/           # Every admin page
+├── public/                  # Logos and favicon
+└── data/                    # Runtime data (db.json) — never committed
+```
+
+The API lives under `/api/v1/` (`auth`, `billing`, `support`, `mail`, `admin`, `public`, `discord`, `status`, `api-keys`, `ads`).
+
+---
+
+## Data & backups
+
+All data is stored in `data/db.json`, which is created on first start and is git-ignored. **Back this file up regularly** — it holds your users, orders and settings. Never commit it or your `.env`.
+
+---
+
+## Contributing
+
+Contributions are very welcome! Read **[CONTRIBUTING.md](CONTRIBUTING.md)** for the fork-and-pull-request guide.
+
+---
+
+## License
+
+Released under the **MIT License** — see [LICENSE](LICENSE).
+
+MonoWeb is built on the open-source AetherPanel project; the original copyright notice is preserved in the license file as the MIT License requires.
