@@ -10,12 +10,13 @@
    Semantic colours (emerald = success, rose = danger) are left untouched.
    ========================================================================== */
 @theme {
-  /* Typography */
-  --font-sans: "Archivo", "Inter", ui-sans-serif, system-ui, sans-serif;
-  --font-display: "Archivo", "Inter", ui-sans-serif, system-ui, sans-serif;
+  /* Typography — Chakra Petch (chamfered, technical) for display/headings,
+     Quicksand (rounded, friendly) for body copy, as in the reference design */
+  --font-sans: "Quicksand", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Chakra Petch", "Archivo", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 
-  /* Neutral base: near-black, very slightly warm (matches the reference) */
+  /* Neutral base: true near-black / near-white (matches the reference) */
   --color-zinc-50: #fafafa;
   --color-zinc-100: #f4f4f5;
   --color-zinc-200: #e4e4e7;
@@ -28,18 +29,22 @@
   --color-zinc-900: #131316;
   --color-zinc-950: #0a0a0b;
 
-  /* MonoNode orange ramp */
-  --color-mono-50: #fff4ec;
-  --color-mono-100: #ffe6d3;
-  --color-mono-200: #ffcaa5;
-  --color-mono-300: #ffa66d;
-  --color-mono-400: #ff8a3d;
-  --color-mono-500: #ff6a1a;
-  --color-mono-600: #ee5208;
-  --color-mono-700: #c53f07;
-  --color-mono-800: #9c330d;
-  --color-mono-900: #7d2d0e;
-  --color-mono-950: #431405;
+  /* MonoNode Black & White ramp — replaces the old orange ramp.
+     50-500 stay light (near-white/silver) so text-mono-400 icon accents and
+     bg-mono-500 + text-zinc-950 solid buttons both read as crisp "white ink".
+     600-950 stay dark (near-black) so hover:bg-mono-600 + text-white pairs
+     invert cleanly to a solid black pill, matching the reference buttons. */
+  --color-mono-50: #ffffff;
+  --color-mono-100: #fafafa;
+  --color-mono-200: #f0f0f1;
+  --color-mono-300: #dcdce0;
+  --color-mono-400: #cfcfd4;
+  --color-mono-500: #f5f5f6;
+  --color-mono-600: #18181b;
+  --color-mono-700: #101012;
+  --color-mono-800: #09090b;
+  --color-mono-900: #050506;
+  --color-mono-950: #000000;
 
   /* Remap the legacy accent families onto the orange ramp */
   --color-amber-50: var(--color-mono-50);
@@ -147,5 +152,15 @@
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 106, 26, 0.6);
+  background: rgba(228, 228, 231, 0.55);
+}
+
+/* Homepage announcement ticker (Home.tsx) */
+@keyframes mono-marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+
+.animate-marquee {
+  animation: mono-marquee 26s linear infinite;
 }
