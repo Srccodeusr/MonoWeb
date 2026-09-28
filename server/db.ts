@@ -9,7 +9,7 @@ import {
   DiscordAccount, DiscordAuditLog,
   ApiKey, ApiAuditLog, WebhookSubscription, LegalPage,
   StatusComponent, Incident, ScheduledMaintenance,
-  ProvisionRecord, PanelIntegrationSettings
+  ProvisionRecord, PanelIntegrationSettings, QuickLink
 } from '../src/types';
 
 const DATA_DIR = path.join(process.cwd(), 'data');
@@ -161,7 +161,7 @@ const defaultSettings: SystemSettings = {
   maintenanceMode: false,
   maintenanceMessage: 'MonoNode is currently performing scheduled system upgrades. We will be back online shortly.',
   defaultTheme: 'dark',
-  accentColor: '#ff6a1a',
+  accentColor: '#ffffff',
   paymentGateways: {
     upi: {
       enabled: true,
@@ -214,7 +214,7 @@ const defaultSettings: SystemSettings = {
   },
   themeSettings: {
     activeThemeId: 'golden',
-    activeFontId: 'Plus Jakarta Sans',
+    activeFontId: 'Quicksand',
     cardStyle: 'rounded-2xl',
     glowIntensity: 'vibrant',
     allowUserCustomization: true,
@@ -256,6 +256,14 @@ const defaultPanelIntegration: PanelIntegrationSettings = {
   autoCreateServer: true,
   startServerOnCompletion: true
 };
+
+// Admin-editable quick links (replaces a single hardcoded panel redirect).
+// Admins add/edit/remove these from Admin > Panel Link; customers see them
+// in the dashboard sidebar as one-click external shortcuts.
+const defaultQuickLinks: QuickLink[] = [
+  { id: 'ql_bot_panel', label: 'Discord Bot Panel', url: '' },
+  { id: 'ql_vps_panel', label: 'VPS Panel', url: '' }
+];
 
 const defaultStatusComponents: StatusComponent[] = [
   {
@@ -421,6 +429,9 @@ export async function getDb(reload = false): Promise<DatabaseSchema> {
           dbCache.settings.panelIntegration = defaultPanelIntegration;
         } else {
           dbCache.settings.panelIntegration = { ...defaultPanelIntegration, ...dbCache.settings.panelIntegration };
+        }
+        if (!Array.isArray(dbCache.settings.quickLinks)) {
+          dbCache.settings.quickLinks = defaultQuickLinks;
         }
         // Backfill the Gift Card gateway for installs saved before it existed
         if (!dbCache.settings.paymentGateways) {
