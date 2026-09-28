@@ -1,10 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import {
   Link2, Save, RefreshCw, CheckCircle2, XCircle, Loader2, Server,
-  AlertTriangle, Clock, RotateCw, ShieldCheck
+  AlertTriangle, Clock, RotateCw, ShieldCheck, Plus, Trash2, ExternalLink
 } from 'lucide-react';
 import { apiRequest } from '../../lib/api';
-import { PanelIntegrationSettings, ProvisionRecord } from '../../types';
+import { PanelIntegrationSettings, ProvisionRecord, QuickLink } from '../../types';
 
 const EMPTY_SETTINGS: PanelIntegrationSettings = {
   enabled: false,
@@ -15,6 +15,9 @@ const EMPTY_SETTINGS: PanelIntegrationSettings = {
   autoCreateServer: true,
   startServerOnCompletion: true
 };
+
+let tempIdCounter = 0;
+const makeTempId = () => `new_${Date.now()}_${tempIdCounter++}`;
 
 const STATUS_STYLE: Record<string, string> = {
   completed: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
@@ -38,6 +41,12 @@ export const PanelLinkSettings: React.FC = () => {
   const [provisionsLoading, setProvisionsLoading] = useState(true);
   const [retryingId, setRetryingId] = useState<string | null>(null);
 
+  // Admin-editable Quick Links — replaces a single hardcoded panel redirect.
+  const [quickLinks, setQuickLinks] = useState<QuickLink[]>([]);
+  const [linksLoading, setLinksLoading] = useState(true);
+  const [linksSaving, setLinksSaving] = useState(false);
+  const [linksMsg, setLinksMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
   const fetchSettings = async () => {
     const res = await apiRequest('/admin/panel-settings');
     if (res.success && res.data) {
@@ -53,10 +62,55 @@ export const PanelLinkSettings: React.FC = () => {
     setProvisionsLoading(false);
   };
 
+  const fetchQuickLinks = async () => {
+    const res = await apiRequest('/admin/settings/quick-links');
+    if (res.success && Array.isArray(res.data)) setQuickLinks(res.data);
+    setLinksLoading(false);
+  };
+
   useEffect(() => {
     fetchSettings();
     fetchProvisions();
+    fetchQuickLinks();
   }, []);
+
+  const handleAddLink = () => {
+    setQuickLinks(links => [...links, { id: makeTempId(), label: '', url: '' }]);
+  };
+
+  const handleUpdateLink = (id: string, field: 'label' | 'url', value: string) => {
+    setQuickLinks(links => links.map(l => (l.id === id ? { ...l, [field]: value } : l)));
+  };
+
+  const handleRemoveLink = (id: string) => {
+    setQuickLinks(links => links.filter(l => l.id !== id));
+  };
+
+  const handleSaveLinks = async () => {
+    setLinksSaving(true);
+    setLinksMsg(null);
+
+    const payload = quickLinks.map(l => ({
+      // Don't send our client-side temp ids upstream — let the server mint real ones.
+      id: l.id.startsWith('new_') ? undefined : l.id,
+      label: l.label.trim(),
+      url: l.url.trim()
+    }));
+
+    const res = await apiRequest('/admin/settings/quick-links', {
+      method: 'PUT',
+      body: JSON.stringify({ links: payload })
+    });
+
+    if (res.success && Array.isArray(res.data)) {
+      setQuickLinks(res.data);
+      setLinksMsg({ type: 'success', text: 'Quick links saved.' });
+    } else {
+      setLinksMsg({ type: 'error', text: res.error?.message || 'Failed to save quick links.' });
+    }
+    setLinksSaving(false);
+    setTimeout(() => setLinksMsg(null), 4000);
+  };
 
   const handleSave = async () => {
     setSaving(true);
@@ -115,11 +169,82 @@ export const PanelLinkSettings: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      {/* Quick Links — admin-editable, no auto-provisioning required */}
+      <div className="p-5 rounded-3xl bg-zinc-900 border border-zinc-800 space-y-5">
+        <div>
+          <div className="flex items-center gap-2">
+            <ExternalLink className="h-4 w-4 text-amber-400" />
+            <h3 className="text-sm font-bold text-white">Quick Links</h3>
+          </div>
+          <p className="text-[11px] text-zinc-500 mt-1">
+            Add, edit, or remove the external links customers see in their dashboard sidebar — a Discord bot panel, a VPS panel, a status page, anything. No fixed redirect: you choose exactly what shows up here.
+          </p>
+        </div>
+
+        {linksLoading ? (
+          <div className="p-6 text-center text-xs text-zinc-400"><Loader2 className="h-4 w-4 animate-spin mx-auto" /></div>
+        ) : (
+          <div className="space-y-2.5">
+            {quickLinks.length === 0 && (
+              <p className="text-xs text-zinc-500 italic">No quick links yet — add one below.</p>
+            )}
+            {quickLinks.map((link) => (
+              <div key={link.id} className="flex flex-col sm:flex-row gap-2 items-stretch sm:items-center">
+                <input
+                  type="text"
+                  value={link.label}
+                  onChange={(e) => handleUpdateLink(link.id, 'label', e.target.value)}
+                  placeholder="Label (e.g. Discord Bot Panel)"
+                  className="w-full sm:w-56 shrink-0 rounded-xl bg-zinc-950 border border-zinc-800 px-3.5 py-2.5 text-xs text-white placeholder-zinc-600 focus:outline-none focus:border-amber-500"
+                />
+                <input
+                  type="text"
+                  value={link.url}
+                  onChange={(e) => handleUpdateLink(link.id, 'url', e.target.value)}
+                  placeholder="https://panel.example.com"
+                  className="w-full rounded-xl bg-zinc-950 border border-zinc-800 px-3.5 py-2.5 text-xs text-white font-mono placeholder-zinc-600 focus:outline-none focus:border-amber-500"
+                />
+                <button
+                  onClick={() => handleRemoveLink(link.id)}
+                  title="Remove link"
+                  className="shrink-0 h-9 w-9 sm:w-auto sm:px-3 flex items-center justify-center rounded-xl bg-zinc-950 border border-zinc-800 text-zinc-400 hover:text-rose-400 hover:border-rose-500/30 transition-colors"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            ))}
+
+            <button
+              onClick={handleAddLink}
+              className="flex items-center gap-1.5 text-xs font-semibold text-zinc-300 hover:text-white transition-colors pt-1"
+            >
+              <Plus className="h-3.5 w-3.5" /> Add Link
+            </button>
+          </div>
+        )}
+
+        {linksMsg && (
+          <p className={`text-xs p-3 rounded-xl border font-semibold ${linksMsg.type === 'success' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-rose-500/10 text-rose-400 border-rose-500/20'}`}>
+            {linksMsg.text}
+          </p>
+        )}
+
+        <button
+          onClick={handleSaveLinks}
+          disabled={linksSaving || linksLoading}
+          className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs flex items-center justify-center gap-1.5 disabled:opacity-50"
+        >
+          {linksSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+          {linksSaving ? 'Saving...' : 'Save Quick Links'}
+        </button>
+      </div>
+
+      {/* Advanced: Pterodactyl/Pelican auto-provisioning (optional) */}
       <div className="p-5 rounded-3xl bg-zinc-900 border border-zinc-800 space-y-5">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Link2 className="h-4 w-4 text-amber-400" />
-            <h3 className="text-sm font-bold text-white">Link your panel</h3>
+            <h3 className="text-sm font-bold text-white">Advanced: Auto-Provisioning (optional)</h3>
           </div>
           <button
             onClick={() => setSettings(s => ({ ...s, enabled: !s.enabled }))}
