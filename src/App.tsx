@@ -152,15 +152,16 @@ function AppContent() {
     }
   }, [user, loading, currentPage, pageParams, handleNavigate]);
 
+  // Fade out the boot loader from index.html once the session has been restored
+  useEffect(() => {
+    if (!loading) {
+      (window as any).__monoLoader?.hide();
+    }
+  }, [loading]);
+
+  // The MonoNode boot loader (index.html) stays on screen while the session restores
   if (loading) {
-    return (
-      <div className="min-h-screen bg-zinc-950 text-white flex items-center justify-center font-sans">
-        <div className="flex flex-col items-center gap-3 text-xs text-zinc-400">
-          <div className="h-8 w-8 rounded-full border-2 border-amber-500 border-t-transparent animate-spin" />
-          <span>Restoring your session...</span>
-        </div>
-      </div>
-    );
+    return null;
   }
 
   const isPublicPage = ['home', 'bot', 'vps', 'pricing', 'status', 'docs', 'terms', 'privacy', 'acceptable-use', 'legal', 'login', 'register'].includes(currentPage);
