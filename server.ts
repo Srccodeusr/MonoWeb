@@ -117,13 +117,20 @@ async function startServer() {
   app.use('/api/v1/status', statusRoutes);
   app.use('/api/v1/api-keys', apiKeysRoutes);
 
-  // Catch-all for missing API routes - must return JSON, not HTML
-  app.all('/api/*', (req, res) => {
+  // Catch-all for missing API routes - must return JSON, not HTML.
+  // Mounted with app.use (not app.all('/api/*', ...)) so it also matches
+  // '/api' itself, not just paths with a segment after it. It sits after
+  // every real '/api/v1/*' router above and before the Vite/static/SPA
+  // block below, so it always wins for API paths and never falls through
+  // to index.html. Only the path is echoed back (no query string, no
+  // server file paths, no stack traces) so nothing internal leaks.
+  app.use('/api', (req, res) => {
+    const requestedPath = req.originalUrl.split('?')[0];
     res.status(404).json({
       success: false,
       error: {
         code: 'API_NOT_FOUND',
-        message: `The API endpoint '${req.originalUrl}' does not exist on this server.`
+        message: `The API endpoint '${requestedPath}' does not exist on this server.`
       }
     });
   });
@@ -158,9 +165,33 @@ async function startServer() {
       },
     }));
     app.get('*', (req, res) => {
+      res.setHeader('Cache-Control', 'no-cache');
+
+      // We only reach here when express.static above couldn't find a
+      // matching file. A request whose last path segment has a file
+      // extension (.js, .css, .png, .map, .woff2, ...) was for a specific
+      // static asset that genuinely doesn't exist — serving index.html
+      // for that would silently swap a missing file for a 200 HTML page
+      // (masking broken deploys/bad cache references), so it gets a real
+      // 404 instead. No filesystem path is included in the response.
+      // Real client-side app routes are always extensionless, so this
+      // check never misclassifies one of those.
+      const looksLikeStaticAsset = /\.[a-zA-Z0-9]+$/.test(req.path) && !req.path.endsWith('.html');
+      if (looksLikeStaticAsset) {
+        return res.status(404).json({
+          success: false,
+          error: {
+            code: 'ASSET_NOT_FOUND',
+            message: 'The requested file was not found.'
+          }
+        });
+      }
+
+      // Anything else is a client-side route: hand off to the SPA shell.
       // The HTML shell references hashed asset filenames, so it must never
       // be cached — otherwise clients can get stuck on stale asset links.
-      res.setHeader('Cache-Control', 'no-cache');
+      // The app's own router (src/lib/routing.ts) then decides whether this
+      // path is a real page or renders the in-app <NotFound /> component.
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }
