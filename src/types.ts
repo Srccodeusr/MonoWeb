@@ -816,7 +816,7 @@ export interface AuthProviderSettings {
 
 export interface CustomThemeSettings {
   activeThemeId: 'golden' | 'emerald' | 'cyberpunk' | 'midnight' | 'crimson' | 'amber' | 'sapphire' | 'custom';
-  activeFontId: 'Outfit' | 'Inter' | 'Space Grotesk' | 'Plus Jakarta Sans' | 'JetBrains Mono' | 'Poppins' | 'Syne' | 'Fira Code';
+  activeFontId: 'Quicksand' | 'Chakra Petch' | 'Outfit' | 'Inter' | 'Space Grotesk' | 'Plus Jakarta Sans' | 'JetBrains Mono' | 'Poppins' | 'Syne' | 'Fira Code';
   accentColor?: string;
   customColors?: {
     accent: string;
@@ -921,6 +921,16 @@ export interface SystemSettings {
   heroDescription?: string;
   footerDescription?: string;
   panelIntegration?: PanelIntegrationSettings;
+  quickLinks?: QuickLink[];
+}
+
+// Admin-managed external links (e.g. "Discord Bot Panel", "VPS Panel", "Status Page").
+// Replaces a single hardcoded panel redirect with a list admins can add/edit/remove
+// from the admin menu; shown to customers in the dashboard sidebar.
+export interface QuickLink {
+  id: string;
+  label: string;
+  url: string;
 }
 
 export interface AnimationSettings {
