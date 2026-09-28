@@ -211,7 +211,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   e.preventDefault();
                   handleNav('dashboard');
                 }}
-                className="hidden sm:flex items-center gap-2 px-3 sm:px-4 py-2 min-h-[44px] rounded-xl text-xs sm:text-sm font-semibold text-white bg-gradient-to-r from-amber-500 to-amber-600 shadow-md hover:opacity-95 transition-all focus:outline-none focus:ring-2 focus:ring-amber-500/50"
+                className={`hidden sm:flex items-center gap-2 px-3 sm:px-4 py-2 min-h-[44px] rounded-xl text-xs sm:text-sm font-semibold text-white bg-gradient-to-r ${accentClasses.gradient} shadow-md hover:opacity-95 transition-all focus:outline-none focus:ring-2 focus:ring-amber-500/50`}
               >
                 <LayoutDashboard className="h-4 w-4" />
                 <span>Dashboard</span>
@@ -608,7 +608,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <button
                   type="button"
                   onClick={() => handleNav('register')}
-                  className="w-full py-3 min-h-[44px] rounded-xl text-xs font-bold text-white bg-gradient-to-r from-amber-500 to-amber-600 shadow-md"
+                  className={`w-full py-3 min-h-[44px] rounded-xl text-xs font-bold text-white bg-gradient-to-r ${accentClasses.gradient} shadow-md`}
                 >
                   Get Started
                 </button>

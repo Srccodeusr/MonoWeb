@@ -49,7 +49,7 @@ export const MonoLogo: React.FC<MonoLogoProps> = ({
 
   // Square logo icon container — network-node glyph on dark card
   const iconContainer = (
-    <div className="relative flex items-center justify-center p-1 rounded-xl bg-zinc-900 border border-amber-500/30 group-hover:border-amber-400/60 shadow-[0_0_15px_rgba(255,106,26,0.25)] transition-all shrink-0 w-9 h-9 overflow-hidden">
+    <div className="relative flex items-center justify-center p-1 rounded-xl bg-zinc-900 border border-white/20 group-hover:border-white/40 shadow-[0_0_15px_rgba(255,255,255,0.15)] transition-all shrink-0 w-9 h-9 overflow-hidden">
       {showCustomLogo ? (
         <img
           src={customLogoUrl}
@@ -61,9 +61,9 @@ export const MonoLogo: React.FC<MonoLogoProps> = ({
         <svg className="w-6 h-6 sm:w-7 sm:h-7" viewBox="0 0 60 60" fill="none">
           <defs>
             <linearGradient id="monoLogoGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor="#ffa66d" />
-              <stop offset="45%" stopColor="#ff6a1a" />
-              <stop offset="100%" stopColor="#c53f07" />
+              <stop offset="0%" stopColor="#ffffff" />
+              <stop offset="45%" stopColor="#d4d4d8" />
+              <stop offset="100%" stopColor="#71717a" />
             </linearGradient>
           </defs>
           <g stroke="url(#monoLogoGrad)" strokeWidth="3" strokeLinecap="round">
@@ -99,10 +99,10 @@ export const MonoLogo: React.FC<MonoLogoProps> = ({
     >
       {iconContainer}
       <div className="flex flex-col leading-none truncate">
-        <span className="text-base sm:text-lg font-extrabold tracking-tight text-white font-sans flex items-center gap-0.5">
+        <span className="text-base sm:text-lg font-bold tracking-tight text-white font-display flex items-center gap-0.5">
           {prefix}
           {suffix && (
-            <span className="bg-gradient-to-r from-amber-300 via-amber-400 to-amber-600 bg-clip-text text-transparent">
+            <span className="bg-gradient-to-r from-white via-zinc-300 to-zinc-500 bg-clip-text text-transparent">
               {suffix}
             </span>
           )}

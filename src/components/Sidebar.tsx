@@ -1,10 +1,11 @@
 import React from 'react';
 import {
   LayoutDashboard, CreditCard, LifeBuoy, Mail,
-  Activity, Settings, LogOut, ShieldCheck
+  Activity, Settings, LogOut, ShieldCheck, ExternalLink
 } from 'lucide-react';
 import { useAuth } from '../lib/AuthContext';
 import { useTheme } from '../lib/ThemeContext';
+import { useBranding } from '../lib/BrandingContext';
 
 interface SidebarProps {
   currentPage: string;
@@ -17,6 +18,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   const { user, logout } = useAuth();
   const { accentClasses, accent, setAccent } = useTheme();
+  const { quickLinks } = useBranding();
 
   return (
     <aside className="hidden lg:flex w-64 shrink-0 border-r border-zinc-800/80 bg-zinc-950/80 backdrop-blur-md flex-col justify-between min-h-[calc(100vh-4rem)]">
@@ -79,6 +81,26 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <Settings className={`h-4 w-4 ${currentPage === 'settings' ? accentClasses.text : ''}`} />
             <span>Settings</span>
           </button>
+
+          {quickLinks.length > 0 && (
+            <>
+              <div className="pt-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-zinc-500 px-3">
+                Quick Links
+              </div>
+              {quickLinks.map((link) => (
+                <a
+                  key={link.id}
+                  href={link.url}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium text-zinc-400 hover:text-white hover:bg-zinc-900 transition-colors"
+                >
+                  <ExternalLink className="h-4 w-4 shrink-0" />
+                  <span className="truncate">{link.label}</span>
+                </a>
+              ))}
+            </>
+          )}
         </div>
       </div>
 
