@@ -16,7 +16,6 @@ import discordRoutes from './server/routes/discord';
 import statusRoutes from './server/routes/status';
 import apiKeysRoutes from './server/routes/apiKeys';
 import { generalApiRateLimiter, sensitiveAuthRateLimiter, safePayloadErrorHandler } from './server/services/requestProtection';
-import { apiNotFound, missingFileGuard, spaFallback, finalNotFound, errorHandler } from './server/services/notFound';
 
 dotenv.config();
 
@@ -118,10 +117,16 @@ async function startServer() {
   app.use('/api/v1/status', statusRoutes);
   app.use('/api/v1/api-keys', apiKeysRoutes);
 
-  // Unmatched API requests (any method, any depth, incl. bare /api) -> JSON 404.
-  // Must stay AFTER every /api route above and BEFORE static files / the SPA fallback below,
-  // so a bad API URL can never be answered with index.html.
-  app.use('/api', apiNotFound);
+  // Catch-all for missing API routes - must return JSON, not HTML
+  app.all('/api/*', (req, res) => {
+    res.status(404).json({
+      success: false,
+      error: {
+        code: 'API_NOT_FOUND',
+        message: `The API endpoint '${req.originalUrl}' does not exist on this server.`
+      }
+    });
+  });
 
   // Vite Integration for SPA Development and Production Serving
   if (process.env.NODE_ENV !== 'production') {
@@ -152,15 +157,13 @@ async function startServer() {
         }
       },
     }));
-    // Missing files (/assets/*, anything with an extension, dotfiles) are real 404s, not the SPA shell
-    app.use(missingFileGuard);
-    // Client-side routes -> index.html (unknown ones get a 404 status so the React 404 page shows correctly)
-    app.get('*', spaFallback(distPath));
+    app.get('*', (req, res) => {
+      // The HTML shell references hashed asset filenames, so it must never
+      // be cached — otherwise clients can get stuck on stale asset links.
+      res.setHeader('Cache-Control', 'no-cache');
+      res.sendFile(path.join(distPath, 'index.html'));
+    });
   }
-
-  // Whatever is left (e.g. POST /nope) -> JSON 404, then a generic error handler (no stack/path leaks)
-  app.use(finalNotFound);
-  app.use(errorHandler);
 
   // Bind and Listen on Port 3000
   const server = app.listen(PORT, '0.0.0.0', () => {
