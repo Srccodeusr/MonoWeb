@@ -1,11 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Bot, Cpu, Zap, ShieldCheck, HardDrive, Terminal,
-  Globe2, ArrowRight, CheckCircle2, Sparkles, Server, Clock, Users, Flame,
-  Sliders, Gauge, Layers
+  Bot, ShieldCheck, ArrowRight, CheckCircle2, Sparkles, Server, Users,
+  Headphones, Gauge, Lock, RotateCw, ChevronDown, Star,
+  Rocket, Terminal, Database
 } from 'lucide-react';
 import { motion } from 'motion/react';
-import { useTheme } from '../../lib/ThemeContext';
 import { useBranding } from '../../lib/BrandingContext';
 import { apiRequest } from '../../lib/api';
 import { Plan } from '../../types';
@@ -14,11 +13,57 @@ interface HomeProps {
   onNavigate: (page: string) => void;
 }
 
+const FALLBACK_BOT_FEATURES = [
+  '24/7 process watchdog',
+  'Environment variables & secrets manager',
+  'Setup & configuration support included',
+  'Low latency connection to bot gateways'
+];
+
+const FALLBACK_VPS_FEATURES = [
+  'High-clock dedicated vCPU cores',
+  'Full root access, any OS image',
+  'Free MySQL/Postgres database & subdomain',
+  'Routine backups & uptime monitoring'
+];
+
+const TICKER_ITEMS = [
+  '99.99% UPTIME SLA',
+  'DISCORD BOT HOSTING',
+  'FULL ROOT ACCESS VPS',
+  '24/7 PROCESS WATCHDOG',
+  'REAL HUMAN SUPPORT',
+  'FREE MIGRATION ASSISTANCE'
+];
+
+const FAQS = [
+  {
+    q: 'How fast can my bot or server go live?',
+    a: 'Once your payment is verified by our team, your service is set up and your credentials are delivered to your dashboard. Bot Hosting is designed for quick deployment; VPS plans come with full root access.'
+  },
+  {
+    q: 'What runtimes does Bot Hosting support?',
+    a: 'Node.js (v18-v22), Python (3.9-3.12), Bun, and Go are supported, with automatic restart on crash and an environment variables & secrets manager.'
+  },
+  {
+    q: 'Can you help me move over from another host?',
+    a: 'Yes. Free migration assistance is available — open a support ticket from your dashboard and our team will help you get moved.'
+  },
+  {
+    q: 'What payment methods do you accept?',
+    a: 'The payment methods currently enabled are shown at checkout — by default that includes UPI, bank transfer, and gift card redemption.'
+  },
+  {
+    q: "What's included with VPS Hosting?",
+    a: 'VPS plans include high-clock dedicated vCPU cores, full root access with any OS image, a free MySQL/Postgres database & subdomain, and routine backups with uptime monitoring.'
+  }
+];
+
 export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
-  const { accentClasses } = useTheme();
-  const { pageAnimationsEnabled, heroDescription } = useBranding();
+  const { pageAnimationsEnabled, heroDescription, brandName } = useBranding();
   const [plans, setPlans] = useState<Plan[]>([]);
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
+  const [openFaq, setOpenFaq] = useState<number | null>(0);
 
   useEffect(() => {
     const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -48,453 +93,297 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
   const vpsPlans = plans.filter(p => p.productId === 'prod_vps' || p.id.startsWith('plan_vps_'));
   const botPlans = plans.filter(p => p.productId === 'prod_bot' || p.id.startsWith('plan_bot_'));
 
-  const minVpsPrice = vpsPlans.length > 0
-    ? Math.min(...vpsPlans.map(p => p.priceMonthly))
-    : 1.49;
+  const cheapestVps = vpsPlans.length > 0
+    ? [...vpsPlans].sort((a, b) => a.priceMonthly - b.priceMonthly)[0]
+    : null;
+  const cheapestBot = botPlans.length > 0
+    ? [...botPlans].sort((a, b) => a.priceMonthly - b.priceMonthly)[0]
+    : null;
 
-  const minBotPrice = botPlans.length > 0
-    ? Math.min(...botPlans.map(p => p.priceMonthly))
-    : 0.99;
+  const minVpsPrice = cheapestVps?.priceMonthly ?? 3.5;
+  const minBotPrice = cheapestBot?.priceMonthly ?? 0.5;
+
+  const botFeatures = (cheapestBot?.features?.length ? cheapestBot.features : FALLBACK_BOT_FEATURES).slice(0, 5);
+  const vpsFeatures = (cheapestVps?.features?.length ? cheapestVps.features : FALLBACK_VPS_FEATURES).slice(0, 5);
 
   const animate = pageAnimationsEnabled && !prefersReducedMotion;
 
   const containerVariants = {
     hidden: { opacity: 0 },
-    visible: {
-      opacity: 1,
-      transition: {
-        staggerChildren: 0.08,
-        delayChildren: 0.05
-      }
-    }
+    visible: { opacity: 1, transition: { staggerChildren: 0.08, delayChildren: 0.05 } }
   };
 
   const itemVariants = {
     hidden: { opacity: 0, y: 12 },
-    visible: {
-      opacity: 1,
-      y: 0,
-      transition: {
-        type: 'spring',
-        stiffness: 120,
-        damping: 18,
-        mass: 0.8
-      }
-    }
+    visible: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 120, damping: 18, mass: 0.8 } }
   };
 
-  const motionDivProps = animate ? {
-    variants: containerVariants,
-    initial: "hidden",
-    animate: "visible"
-  } : {};
-
-  const motionChildProps = animate ? {
-    variants: itemVariants
-  } : {};
+  const motionDivProps = animate ? { variants: containerVariants, initial: 'hidden', animate: 'visible' } : {};
+  const motionChildProps = animate ? { variants: itemVariants } : {};
 
   return (
-    <motion.div {...motionDivProps} className="space-y-14 sm:space-y-18 py-4 sm:py-6 relative">
-      {/* Background Ambient Lighting (Layer 1-3: Smooth soft radial gradients, zero visible rectangular edges) */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none -z-10">
-        {/* Layer 2: Subtle warm radial amber/gold glow upper center */}
-        <div
-          className="absolute -top-36 left-1/2 -translate-x-1/2 w-[600px] sm:w-[850px] md:w-[1100px] h-[480px] rounded-full opacity-40 blur-[160px]"
-          style={{
-            background: 'radial-gradient(circle, rgba(245, 158, 11, 0.18) 0%, rgba(217, 119, 6, 0.07) 45%, rgba(0, 0, 0, 0) 70%)'
-          }}
-        />
+    <motion.div {...motionDivProps} className="relative isolate">
 
-        {/* Layer 3: Very subtle teal/cyan ambient glow lower left side */}
-        <div
-          className="absolute top-48 -left-24 w-[350px] sm:w-[500px] h-[350px] rounded-full opacity-25 blur-[150px]"
-          style={{
-            background: 'radial-gradient(circle, rgba(20, 184, 166, 0.12) 0%, rgba(13, 148, 136, 0.04) 50%, rgba(0, 0, 0, 0) 75%)'
-          }}
-        />
+      {/* ================= HERO (dark) ================= */}
+      <motion.section {...motionChildProps} className="relative px-4 sm:px-6 lg:px-8 pt-4 sm:pt-8 pb-10 sm:pb-14">
+        {/* Soft ambient glow */}
+        <div className="absolute inset-0 overflow-hidden pointer-events-none -z-10">
+          <div
+            className="absolute -top-36 left-1/2 -translate-x-1/2 w-[600px] sm:w-[900px] h-[480px] rounded-full opacity-30 blur-[160px]"
+            style={{ background: 'radial-gradient(circle, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0.03) 45%, rgba(0,0,0,0) 70%)' }}
+          />
+        </div>
 
-        {/* Layer 3b: Micro warm ambient glow right side for optical balance */}
-        <div
-          className="absolute top-96 -right-24 w-[350px] sm:w-[480px] h-[320px] rounded-full opacity-20 blur-[140px]"
-          style={{
-            background: 'radial-gradient(circle, rgba(245, 158, 11, 0.10) 0%, rgba(0, 0, 0, 0) 70%)'
-          }}
-        />
-      </div>
-
-      {/* Hero Section */}
-      <motion.section {...motionChildProps} className="relative px-4 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-[1080px]">
           <div className="text-center space-y-5 sm:space-y-6 max-w-3xl mx-auto">
-            
-            {/* Announcement Badge */}
-            <div>
-              <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-xs font-semibold text-amber-300 shadow-sm shadow-amber-500/5 backdrop-blur-sm">
-                <Sparkles className="h-3.5 w-3.5 text-amber-400 shrink-0" />
-                <span>New Infrastructure Upgrade — Up to 35% Faster TPS</span>
-              </div>
+            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/10 border border-white/15 text-xs font-semibold text-zinc-100 backdrop-blur-sm">
+              <Sparkles className="h-3.5 w-3.5 shrink-0" />
+              <span>{brandName} Bot &amp; VPS Hosting</span>
             </div>
 
-            {/* Main Headline */}
-            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight text-white font-sans leading-[1.12]">
-              Powerful Hosting.{' '}
-              <span className={`bg-gradient-to-r ${accentClasses.gradient} bg-clip-text text-transparent`}>
-                Without Complexity.
+            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight text-white font-display leading-[1.08]">
+              Hosting, built
+              <br />
+              <span className="bg-gradient-to-r from-white via-zinc-200 to-zinc-500 bg-clip-text text-transparent">
+                without the noise.
               </span>
             </h1>
 
-            {/* Description */}
             <p className="text-sm sm:text-base md:text-lg text-zinc-400 max-w-2xl mx-auto leading-relaxed">
               {heroDescription}
             </p>
 
-            {/* CTA Buttons */}
             <div className="flex flex-col sm:flex-row items-center justify-center gap-3.5 pt-1">
               <button
-                onClick={() => onNavigate('pricing')}
-                className={`w-full sm:w-auto px-8 py-3.5 rounded-2xl font-semibold text-white bg-gradient-to-r ${accentClasses.gradient} shadow-lg ${accentClasses.shadow} hover:opacity-95 hover:scale-[1.01] active:scale-[0.99] transition-all flex items-center justify-center gap-2 text-sm`}
+                onClick={() => onNavigate('register')}
+                className="w-full sm:w-auto px-8 py-3.5 rounded-2xl font-semibold text-zinc-950 bg-white hover:bg-zinc-200 shadow-lg shadow-black/30 hover:scale-[1.01] active:scale-[0.99] transition-all flex items-center justify-center gap-2 text-sm"
               >
-                <span>View Plans & Pricing</span>
+                <Rocket className="h-4 w-4" />
+                Get Started Free
+              </button>
+              <button
+                onClick={() => onNavigate('pricing')}
+                className="w-full sm:w-auto px-8 py-3.5 rounded-2xl font-semibold text-white bg-transparent border border-white/20 hover:bg-white/10 hover:scale-[1.01] active:scale-[0.99] transition-all flex items-center justify-center gap-2 text-sm"
+              >
+                View All Plans
                 <ArrowRight className="h-4 w-4" />
               </button>
+            </div>
 
+            <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2 pt-2 text-xs text-zinc-500">
+              <span className="flex items-center gap-1.5"><Star className="h-3.5 w-3.5 fill-current text-white" /> Real human support</span>
+              <span className="hidden sm:inline text-zinc-700">•</span>
+              <span className="flex items-center gap-1.5"><ShieldCheck className="h-3.5 w-3.5" /> DDoS-protected network</span>
+              <span className="hidden sm:inline text-zinc-700">•</span>
+              <span className="flex items-center gap-1.5"><Gauge className="h-3.5 w-3.5" /> Instant deployment</span>
+            </div>
+          </div>
+        </div>
+      </motion.section>
+
+      {/* ================= TICKER (full-bleed) ================= */}
+      <motion.div {...motionChildProps} className="-mx-4 lg:-mx-6 border-y border-zinc-800 bg-zinc-950 overflow-hidden">
+        <div className={`flex w-max whitespace-nowrap py-2.5 text-[11px] font-bold tracking-widest text-zinc-400 font-mono ${animate ? 'animate-marquee' : ''}`}>
+          {[...TICKER_ITEMS, ...TICKER_ITEMS].map((item, i) => (
+            <span key={i} className="flex items-center">
+              <span className="px-4">{item}</span>
+              <span className="text-zinc-700">•</span>
+            </span>
+          ))}
+        </div>
+      </motion.div>
+
+      {/* ================= OUR PRODUCTS (full-bleed, light) ================= */}
+      <motion.section {...motionChildProps} className="-mx-4 lg:-mx-6 bg-zinc-100">
+        <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 py-14 sm:py-20">
+          <div className="text-center max-w-xl mx-auto mb-10 sm:mb-14 space-y-2">
+            <span className="text-xs font-bold tracking-[0.2em] text-zinc-500 uppercase">Purchase</span>
+            <h2 className="text-3xl sm:text-4xl font-bold text-zinc-950 font-display">Our Products</h2>
+            <p className="text-xs sm:text-sm text-zinc-600">
+              Two products, done properly — no confusing tiers, no filler hosting types.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 sm:gap-6">
+
+            {/* Bot Hosting */}
+            <div className="rounded-2xl border border-zinc-300 bg-white p-6 sm:p-7 flex flex-col justify-between shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300">
+              <div className="space-y-5">
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-zinc-950 text-white">
+                  <Bot className="h-6 w-6" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-zinc-950 font-display">Bot Hosting</h3>
+                  <p className="text-xs text-zinc-500 mt-0.5">Starting at</p>
+                  <p className="text-3xl font-bold text-zinc-950">
+                    ${minBotPrice.toFixed(2)}<span className="text-sm font-medium text-zinc-500">/month</span>
+                  </p>
+                </div>
+                <ul className="space-y-2 text-xs text-zinc-700">
+                  {botFeatures.map((f, i) => (
+                    <li key={i} className="flex items-start gap-2">
+                      <CheckCircle2 className="h-4 w-4 text-zinc-950 shrink-0 mt-0.5" />
+                      <span>{f}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
               <button
-                onClick={() => onNavigate('status')}
-                className="w-full sm:w-auto px-8 py-3.5 rounded-2xl font-semibold text-zinc-300 bg-zinc-900/90 border border-zinc-800/80 hover:text-white hover:bg-zinc-800 hover:border-zinc-700 hover:scale-[1.01] active:scale-[0.99] transition-all flex items-center justify-center gap-2 text-sm shadow-sm"
+                onClick={() => onNavigate('bot')}
+                className="w-full py-3 rounded-xl font-semibold text-sm bg-zinc-950 text-white hover:bg-zinc-800 transition-colors flex items-center justify-center gap-2 mt-6"
               >
-                <Globe2 className="h-4 w-4 text-emerald-400 shrink-0" />
-                <span>Global Node Locations</span>
+                Learn More <ArrowRight className="h-4 w-4" />
               </button>
             </div>
 
-            {/* Trust Indicators Row */}
-            <div className="pt-6 mt-2 border-t border-zinc-800/60 flex flex-wrap items-center justify-center gap-y-3 gap-x-6 sm:gap-x-8 text-xs text-zinc-400">
-              <div className="flex items-center gap-1.5">
-                <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
-                <span className="font-medium text-zinc-300">99.99% Uptime SLA</span>
+            {/* VPS Hosting */}
+            <div className="rounded-2xl border border-zinc-300 bg-white p-6 sm:p-7 flex flex-col justify-between shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300">
+              <div className="space-y-5">
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-zinc-950 text-white">
+                  <Server className="h-6 w-6" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-zinc-950 font-display">VPS Hosting</h3>
+                  <p className="text-xs text-zinc-500 mt-0.5">Starting at</p>
+                  <p className="text-3xl font-bold text-zinc-950">
+                    ${minVpsPrice.toFixed(2)}<span className="text-sm font-medium text-zinc-500">/month</span>
+                  </p>
+                </div>
+                <ul className="space-y-2 text-xs text-zinc-700">
+                  {vpsFeatures.map((f, i) => (
+                    <li key={i} className="flex items-start gap-2">
+                      <CheckCircle2 className="h-4 w-4 text-zinc-950 shrink-0 mt-0.5" />
+                      <span>{f}</span>
+                    </li>
+                  ))}
+                </ul>
               </div>
-              <div className="flex items-center gap-1.5">
-                <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
-                <span className="font-medium text-zinc-300">Fast Account Setup</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
-                <span className="font-medium text-zinc-300">Free Subdomain & DDoS Filter</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
-                <span className="font-medium text-zinc-300">Automated File Backups</span>
-              </div>
+              <button
+                onClick={() => onNavigate('vps')}
+                className="w-full py-3 rounded-xl font-semibold text-sm bg-zinc-950 text-white hover:bg-zinc-800 transition-colors flex items-center justify-center gap-2 mt-6"
+              >
+                Learn More <ArrowRight className="h-4 w-4" />
+              </button>
             </div>
 
-          </div>
-
-          {/* Premium Infrastructure Showcase Panel */}
-          <div className="mt-10 sm:mt-12 max-w-5xl mx-auto">
-            <div className="relative rounded-2xl bg-zinc-950/70 border border-zinc-800/80 p-5 sm:p-6 lg:p-8 shadow-xl backdrop-blur-md overflow-hidden">
-              {/* Subtle top ambient gradient line */}
-              <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-amber-500/30 to-transparent" />
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 md:gap-6 divide-y md:divide-y-0 md:divide-x divide-zinc-800/60">
-                {/* 1. Fast Onboarding */}
-                <div className="space-y-3 pt-3 md:pt-0 md:px-4 first:md:pl-0">
-                  <div className="h-10 w-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
-                    <Zap className="h-5 w-5" />
-                  </div>
-                  <h3 className="text-xs font-bold text-white uppercase tracking-wider">
-                    Fast Onboarding
-                  </h3>
-                  <p className="text-xs text-zinc-400 leading-relaxed">
-                    Choose your plan and get set up in minutes with transparent pricing and simple account management.
-                  </p>
-                </div>
-
-                {/* 2. Performance Focused */}
-                <div className="space-y-3 pt-5 md:pt-0 md:px-4">
-                  <div className="h-10 w-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
-                    <Cpu className="h-5 w-5" />
-                  </div>
-                  <h3 className="text-xs font-bold text-white uppercase tracking-wider">
-                    Performance Focused
-                  </h3>
-                  <p className="text-xs text-zinc-400 leading-relaxed">
-                    Flexible resource allocations and reliable infrastructure built for demanding workloads.
-                  </p>
-                </div>
-
-                {/* 3. Dedicated Support */}
-                <div className="space-y-3 pt-5 md:pt-0 md:px-4 last:md:pr-0">
-                  <div className="h-10 w-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
-                    <Sliders className="h-5 w-5" />
-                  </div>
-                  <h3 className="text-xs font-bold text-white uppercase tracking-wider">
-                    Dedicated Support
-                  </h3>
-                  <p className="text-xs text-zinc-400 leading-relaxed">
-                    Our team handles setup, configuration, backups, and networking so you don't have to.
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Infrastructure Built for Performance Section */}
-          <div className="mt-12 sm:mt-16 max-w-6xl mx-auto">
-            <div className="text-center max-w-2xl mx-auto mb-8 sm:mb-10 space-y-2">
-              <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-white font-sans">
-                Infrastructure Built for Performance
-              </h2>
-              <p className="text-xs sm:text-sm text-zinc-400 leading-relaxed">
-                Enterprise-grade hardware, ultra-low latency routing, and intuitive management tools designed for peak stability.
-              </p>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
-              {/* Card 1: Fast Setup */}
-              <div className="p-5 sm:p-6 rounded-2xl bg-zinc-900/40 border border-zinc-800/80 hover:border-amber-500/30 hover:shadow-lg hover:shadow-amber-500/5 hover:-translate-y-1 transition-all duration-300 space-y-3 flex flex-col justify-between h-full">
-                <div className="space-y-3">
-                  <div className="h-10 w-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 shrink-0">
-                    <Zap className="h-5 w-5" />
-                  </div>
-                  <h3 className="text-base font-semibold text-white">Fast Setup</h3>
-                  <p className="text-xs text-zinc-400 leading-relaxed">
-                    Pick a plan, complete checkout, and our team gets your bot or VPS online quickly.
-                  </p>
-                </div>
-              </div>
-
-              {/* Card 2: Reliable Infrastructure */}
-              <div className="p-5 sm:p-6 rounded-2xl bg-zinc-900/40 border border-zinc-800/80 hover:border-amber-500/30 hover:shadow-lg hover:shadow-amber-500/5 hover:-translate-y-1 transition-all duration-300 space-y-3 flex flex-col justify-between h-full">
-                <div className="space-y-3">
-                  <div className="h-10 w-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 shrink-0">
-                    <Server className="h-5 w-5" />
-                  </div>
-                  <h3 className="text-base font-semibold text-white">Reliable Infrastructure</h3>
-                  <p className="text-xs text-zinc-400 leading-relaxed">
-                    Powered by high-clock compute hardware, enterprise Gen4 NVMe arrays, and dedicated DDoS protection for continuous uptime.
-                  </p>
-                </div>
-              </div>
-
-              {/* Card 3: Real Human Support */}
-              <div className="p-5 sm:p-6 rounded-2xl bg-zinc-900/40 border border-zinc-800/80 hover:border-amber-500/30 hover:shadow-lg hover:shadow-amber-500/5 hover:-translate-y-1 transition-all duration-300 space-y-3 flex flex-col justify-between h-full">
-                <div className="space-y-3">
-                  <div className="h-10 w-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 shrink-0">
-                    <Cpu className="h-5 w-5" />
-                  </div>
-                  <h3 className="text-base font-semibold text-white">Real Human Support</h3>
-                  <p className="text-xs text-zinc-400 leading-relaxed">
-                    Get help from our support desk for setup questions, billing, and anything else — with tracked tickets and fast replies.
-                  </p>
-                </div>
-              </div>
-
-              {/* Card 4: Transparent Billing */}
-              <div className="p-5 sm:p-6 rounded-2xl bg-zinc-900/40 border border-zinc-800/80 hover:border-amber-500/30 hover:shadow-lg hover:shadow-amber-500/5 hover:-translate-y-1 transition-all duration-300 space-y-3 flex flex-col justify-between h-full">
-                <div className="space-y-3">
-                  <div className="h-10 w-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 shrink-0">
-                    <Globe2 className="h-5 w-5" />
-                  </div>
-                  <h3 className="text-base font-semibold text-white">Transparent Billing</h3>
-                  <p className="text-xs text-zinc-400 leading-relaxed">
-                    Track your balance, orders, and invoices in one dashboard, with instant and manual payment methods to choose from.
-                  </p>
-                </div>
-              </div>
-            </div>
           </div>
         </div>
       </motion.section>
 
-      {/* Product Category Showcase */}
-      <motion.section {...motionChildProps} className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
-        <div className="text-center max-w-2xl mx-auto mb-8 sm:mb-10 space-y-2">
-          <h2 className="text-2xl sm:text-3xl font-bold text-white font-sans">
-            Choose Your Hosting Product
+      {/* ================= INFRASTRUCTURE (full-bleed, black) ================= */}
+      <motion.section {...motionChildProps} className="-mx-4 lg:-mx-6 bg-black">
+        <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 py-14 sm:py-20 text-center">
+          <span className="text-xs font-bold tracking-[0.2em] text-zinc-500 uppercase">Infrastructure</span>
+          <h2 className="text-3xl sm:text-4xl font-bold text-white font-display mt-2 leading-tight">
+            Built for Uptime
           </h2>
-          <p className="text-xs sm:text-sm text-zinc-400">
-            Tailored hardware configurations and optimized container runtimes for gaming and bot services.
+          <p className="text-xs sm:text-sm text-zinc-400 max-w-xl mx-auto mt-3 leading-relaxed">
+            {brandName} keeps your bots and servers running with process watchdogs, routine backups, uptime monitoring, and a team that answers tickets.
           </p>
-        </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 sm:gap-8">
-
-          {/* Bot Hosting Card */}
-          <div className="rounded-2xl border border-zinc-800/90 bg-zinc-900/40 p-6 sm:p-8 space-y-6 hover:border-amber-500/40 hover:shadow-xl hover:shadow-amber-500/5 hover:-translate-y-1 transition-all duration-300 flex flex-col justify-between group">
-            <div className="space-y-6">
-              <div className="flex items-center justify-between">
-                <div className="flex h-12 w-12 sm:h-14 sm:w-14 items-center justify-center rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-400 group-hover:scale-105 transition-transform">
-                  <Bot className="h-6 w-6 sm:h-7 sm:w-7" />
-                </div>
-                <span className="px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                  Starts at ${minBotPrice.toFixed(2)}/mo
-                </span>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4 mt-10">
+            {[
+              { icon: RotateCw, label: 'Auto-restart on crash' },
+              { icon: ShieldCheck, label: 'Uptime monitoring' },
+              { icon: Database, label: 'Routine backups' },
+              { icon: Lock, label: 'Full root access' },
+              { icon: Terminal, label: 'Multi-runtime bots' },
+              { icon: Headphones, label: 'Real human support' }
+            ].map(({ icon: Icon, label }) => (
+              <div key={label} className="p-4 rounded-2xl bg-zinc-900/60 border border-zinc-800 flex flex-col items-center gap-2.5 text-center hover:border-zinc-600 transition-colors">
+                <Icon className="h-5 w-5 text-white" />
+                <span className="text-[11px] font-semibold text-zinc-300 leading-snug">{label}</span>
               </div>
-
-              <div className="space-y-2">
-                <h3 className="text-xl sm:text-2xl font-bold text-white">Bot Hosting</h3>
-                <p className="text-xs sm:text-sm text-zinc-400 leading-relaxed">
-                  Persistent 24/7 background process manager for Discord, Telegram, and WhatsApp bots. Supporting Node.js (v18-v22), Python (3.9-3.12), Bun, and Go runtimes with auto-restart on crash.
-                </p>
-              </div>
-
-              <ul className="space-y-2.5 text-xs text-zinc-300">
-                <li className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-amber-400 shrink-0" /> 24/7 PM2-style Process Watchdog</li>
-                <li className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-amber-400 shrink-0" /> Environment Variables & Secrets Manager</li>
-                <li className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-amber-400 shrink-0" /> Setup & Configuration Support Included</li>
-                <li className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-amber-400 shrink-0" /> Low Latency Connection to Bot Gateways</li>
-              </ul>
-            </div>
-
-            <button
-              onClick={() => onNavigate('bot')}
-              className="w-full py-3 rounded-xl font-semibold text-sm bg-zinc-800/90 text-white hover:bg-amber-600 transition-colors flex items-center justify-center gap-2 mt-4"
-            >
-              <span>Explore Bot Hosting Plans</span>
-              <ArrowRight className="h-4 w-4" />
-            </button>
+            ))}
           </div>
-
-          {/* VPS Hosting Card */}
-          <div className="rounded-2xl border border-zinc-800/90 bg-zinc-900/40 p-6 sm:p-8 space-y-6 hover:border-amber-500/40 hover:shadow-xl hover:shadow-amber-500/5 hover:-translate-y-1 transition-all duration-300 flex flex-col justify-between group">
-            <div className="space-y-6">
-              <div className="flex items-center justify-between">
-                <div className="flex h-12 w-12 sm:h-14 sm:w-14 items-center justify-center rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-400 group-hover:scale-105 transition-transform">
-                  <Server className="h-6 w-6 sm:h-7 sm:w-7" />
-                </div>
-                <span className="px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                  Starts at ${minVpsPrice.toFixed(2)}/mo
-                </span>
-              </div>
-
-              <div className="space-y-2">
-                <h3 className="text-xl sm:text-2xl font-bold text-white">VPS Hosting</h3>
-                <p className="text-xs sm:text-sm text-zinc-400 leading-relaxed">
-                  Full root-access virtual private servers for sites, apps, and services, with performance tuning handled by our team.
-                </p>
-              </div>
-
-              <ul className="space-y-2.5 text-xs text-zinc-300">
-                <li className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-amber-400 shrink-0" /> High-Clock Dedicated vCPU Cores</li>
-                <li className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-amber-400 shrink-0" /> Full Root Access, Any OS Image</li>
-                <li className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-amber-400 shrink-0" /> Free MySQL/Postgres Database & Subdomain</li>
-                <li className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-amber-400 shrink-0" /> Routine Backups & Uptime Monitoring</li>
-              </ul>
-            </div>
-
-            <button
-              onClick={() => onNavigate('vps')}
-              className="w-full py-3 rounded-xl font-semibold text-sm bg-zinc-800/90 text-white hover:bg-amber-600 transition-colors flex items-center justify-center gap-2 mt-4"
-            >
-              <span>Explore VPS Plans</span>
-              <ArrowRight className="h-4 w-4" />
-            </button>
-          </div>
-
         </div>
       </motion.section>
 
-      {/* Feature Highlights Grid */}
-      <motion.section {...motionChildProps} className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 border-t border-zinc-800/60 pt-12 sm:pt-16">
-        <div className="text-center max-w-2xl mx-auto mb-10 sm:mb-12 space-y-2">
-          <h2 className="text-2xl sm:text-3xl font-bold text-white font-sans">
-            Engineered for Modern Game Infrastructure
+      {/* ================= STATS (full-bleed, light) ================= */}
+      <motion.section {...motionChildProps} className="-mx-4 lg:-mx-6 bg-zinc-100">
+        <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 py-14 sm:py-20 text-center">
+          <h2 className="text-2xl sm:text-3xl font-bold text-zinc-950 font-display">
+            Built for developers and server owners
           </h2>
-          <p className="text-xs sm:text-sm text-zinc-400">
-            Built from the ground up to prevent downtime, reduce latency, and back every plan with real infrastructure and real support.
+          <p className="text-xs sm:text-sm text-zinc-600 mt-2 max-w-lg mx-auto">
+            Straightforward hosting, transparent pricing, and a team that actually answers tickets.
           </p>
-        </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-          
-          <div className="p-5 sm:p-6 rounded-2xl bg-zinc-900/40 border border-zinc-800/80 hover:border-amber-500/30 hover:shadow-lg hover:shadow-amber-500/5 hover:-translate-y-1 transition-all duration-300 space-y-3">
-            <div className="h-10 w-10 rounded-xl bg-violet-500/10 border border-violet-500/20 flex items-center justify-center text-violet-400 shrink-0">
-              <Cpu className="h-5 w-5" />
-            </div>
-            <h3 className="text-base font-bold text-white">AMD Ryzen 9 CPUs</h3>
-            <p className="text-xs text-zinc-400 leading-relaxed">
-              Equipped with Ryzen 9 7950X processors boosting up to 5.7GHz to deliver smooth 20.0 TPS even under heavy player loads.
-            </p>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 sm:gap-6 mt-10">
+            {[
+              { icon: Gauge, value: '99.99%', label: 'Uptime SLA' },
+              { icon: Headphones, value: '24/7', label: 'Process watchdog' },
+              { icon: Bot, value: '2', label: 'Focused products' },
+              { icon: Users, value: 'Human', label: 'Support, not bots' }
+            ].map(({ icon: Icon, value, label }) => (
+              <div key={label} className="p-4">
+                <Icon className="h-5 w-5 text-zinc-950 mx-auto mb-2" />
+                <div className="text-2xl sm:text-3xl font-bold text-zinc-950 font-display">{value}</div>
+                <div className="text-[11px] text-zinc-600 mt-1">{label}</div>
+              </div>
+            ))}
           </div>
-
-          <div className="p-5 sm:p-6 rounded-2xl bg-zinc-900/40 border border-zinc-800/80 hover:border-amber-500/30 hover:shadow-lg hover:shadow-amber-500/5 hover:-translate-y-1 transition-all duration-300 space-y-3">
-            <div className="h-10 w-10 rounded-xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center text-cyan-400 shrink-0">
-              <ShieldCheck className="h-5 w-5" />
-            </div>
-            <h3 className="text-base font-bold text-white">3.2 Tbps DDoS Shield</h3>
-            <p className="text-xs text-zinc-400 leading-relaxed">
-              Always-on hardware mitigation filters layer 3, 4, and 7 attacks so your game network stays online uninterrupted.
-            </p>
-          </div>
-
-          <div className="p-5 sm:p-6 rounded-2xl bg-zinc-900/40 border border-zinc-800/80 hover:border-amber-500/30 hover:shadow-lg hover:shadow-amber-500/5 hover:-translate-y-1 transition-all duration-300 space-y-3">
-            <div className="h-10 w-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 shrink-0">
-              <HardDrive className="h-5 w-5" />
-            </div>
-            <h3 className="text-base font-bold text-white">Gen4 NVMe Storage</h3>
-            <p className="text-xs text-zinc-400 leading-relaxed">
-              Enterprise PCIe 4.0 NVMe SSDs deliver 7,000 MB/s read speeds for instant chunk rendering and sub-second boot times.
-            </p>
-          </div>
-
-          <div className="p-5 sm:p-6 rounded-2xl bg-zinc-900/40 border border-zinc-800/80 hover:border-amber-500/30 hover:shadow-lg hover:shadow-amber-500/5 hover:-translate-y-1 transition-all duration-300 space-y-3">
-            <div className="h-10 w-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 shrink-0">
-              <Terminal className="h-5 w-5" />
-            </div>
-            <h3 className="text-base font-bold text-white">Managed by Our Team</h3>
-            <p className="text-xs text-zinc-400 leading-relaxed">
-              Setup, configuration, and ongoing maintenance handled for you, so you can focus on your community, not the infrastructure.
-            </p>
-          </div>
-
-          <div className="p-5 sm:p-6 rounded-2xl bg-zinc-900/40 border border-zinc-800/80 hover:border-amber-500/30 hover:shadow-lg hover:shadow-amber-500/5 hover:-translate-y-1 transition-all duration-300 space-y-3">
-            <div className="h-10 w-10 rounded-xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-400 shrink-0">
-              <Clock className="h-5 w-5" />
-            </div>
-            <h3 className="text-base font-bold text-white">Routine Backups</h3>
-            <p className="text-xs text-zinc-400 leading-relaxed">
-              Regular backups and world saves keep your data safe, with restore requests handled quickly by our support team.
-            </p>
-          </div>
-
-          <div className="p-5 sm:p-6 rounded-2xl bg-zinc-900/40 border border-zinc-800/80 hover:border-amber-500/30 hover:shadow-lg hover:shadow-amber-500/5 hover:-translate-y-1 transition-all duration-300 space-y-3">
-            <div className="h-10 w-10 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 shrink-0">
-              <Globe2 className="h-5 w-5" />
-            </div>
-            <h3 className="text-base font-bold text-white">Multi-Region Locations</h3>
-            <p className="text-xs text-zinc-400 leading-relaxed">
-              Choose infrastructure close to your players across US East (Virginia), EU Central (Frankfurt), or Asia Pacific (Singapore).
-            </p>
-          </div>
-
         </div>
       </motion.section>
 
-      {/* CTA Banner */}
-      <motion.section {...motionChildProps} className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
-        <div className="rounded-3xl bg-gradient-to-r from-violet-950/30 via-zinc-900/90 to-cyan-950/30 border border-zinc-800/80 p-8 sm:p-12 text-center space-y-5 shadow-2xl relative overflow-hidden">
-          <h2 className="text-2xl sm:text-4xl font-extrabold text-white">
-            Ready to Launch Your Server?
+      {/* ================= FAQ ================= */}
+      <motion.section {...motionChildProps} className="px-4 sm:px-6 lg:px-8 py-14 sm:py-20">
+        <div className="mx-auto max-w-2xl">
+          <div className="text-center mb-8 sm:mb-10 space-y-2">
+            <span className="text-xs font-bold tracking-[0.2em] text-zinc-500 uppercase">Support</span>
+            <h2 className="text-2xl sm:text-3xl font-bold text-white font-display">Frequently Asked Questions</h2>
+          </div>
+
+          <div className="space-y-2.5">
+            {FAQS.map((item, i) => {
+              const isOpen = openFaq === i;
+              return (
+                <div key={i} className="rounded-2xl border border-zinc-800 bg-zinc-900/40 overflow-hidden">
+                  <button
+                    onClick={() => setOpenFaq(isOpen ? null : i)}
+                    className="w-full flex items-center justify-between gap-3 p-4 sm:p-5 text-left"
+                  >
+                    <span className="text-sm font-semibold text-white">{item.q}</span>
+                    <ChevronDown className={`h-4 w-4 text-zinc-400 shrink-0 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+                  </button>
+                  {isOpen && (
+                    <div className="px-4 sm:px-5 pb-4 sm:pb-5 -mt-1">
+                      <p className="text-xs sm:text-sm text-zinc-400 leading-relaxed">{item.a}</p>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </motion.section>
+
+      {/* ================= FINAL CTA ================= */}
+      <motion.section {...motionChildProps} className="px-4 sm:px-6 lg:px-8 pb-14 sm:pb-20">
+        <div className="mx-auto max-w-5xl rounded-3xl bg-white p-8 sm:p-14 text-center space-y-5 shadow-2xl">
+          <h2 className="text-2xl sm:text-4xl font-bold text-zinc-950 font-display">
+            Ready to launch?
           </h2>
-          <p className="text-zinc-400 text-xs sm:text-sm max-w-xl mx-auto leading-relaxed">
-            Join thousands of server owners and bot developers hosting on MonoNode today. Free migration assistance available.
+          <p className="text-zinc-600 text-xs sm:text-sm max-w-xl mx-auto leading-relaxed">
+            Create a free account and deploy your first bot or server in minutes. Free migration assistance available.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3.5 pt-2">
             <button
               onClick={() => onNavigate('register')}
-              className={`w-full sm:w-auto px-8 py-3.5 rounded-xl font-semibold text-white bg-gradient-to-r ${accentClasses.gradient} shadow-lg ${accentClasses.shadow} hover:opacity-95 hover:scale-[1.01] active:scale-[0.99] transition-all text-sm`}
+              className="w-full sm:w-auto px-8 py-3.5 rounded-xl font-semibold text-white bg-zinc-950 hover:bg-zinc-800 hover:scale-[1.01] active:scale-[0.99] transition-all text-sm"
             >
               Create Free Account
             </button>
             <button
               onClick={() => onNavigate('pricing')}
-              className="w-full sm:w-auto px-8 py-3.5 rounded-xl font-semibold text-zinc-300 bg-zinc-900/90 border border-zinc-800/80 hover:text-white hover:bg-zinc-800 hover:scale-[1.01] active:scale-[0.99] transition-all text-sm"
+              className="w-full sm:w-auto px-8 py-3.5 rounded-xl font-semibold text-zinc-700 bg-zinc-100 border border-zinc-300 hover:bg-zinc-200 hover:scale-[1.01] active:scale-[0.99] transition-all text-sm"
             >
               Browse All Plans
             </button>
           </div>
         </div>
       </motion.section>
+
     </motion.div>
   );
 };
