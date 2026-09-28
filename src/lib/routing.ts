@@ -19,7 +19,7 @@ export function parseUrlToRoute(pathname: string, search: string): RouteState {
   const first = pathParts[0].toLowerCase();
 
   // Public pages
-  if (first === 'home' || first === 'index.html') return { page: 'home', params: queryObj };
+  if (first === 'home') return { page: 'home', params: queryObj };
   if (first === 'vps') return { page: 'vps', params: queryObj };
   if (first === 'bot') return { page: 'bot', params: queryObj };
   if (first === 'pricing') return { page: 'pricing', params: queryObj };
@@ -66,19 +66,11 @@ export function parseUrlToRoute(pathname: string, search: string): RouteState {
     if (sub === 'api-keys' || sub === 'keys') return { page: 'admin-api-keys', params: queryObj };
     if (sub === 'legal' || sub === 'content' || sub === 'legal-pages') return { page: 'admin-legal', params: queryObj };
     if (sub === 'settings') return { page: 'admin-settings', params: queryObj };
-    return { page: 'not-found', params: queryObj };
+    return { page: 'admin-dashboard', params: queryObj };
   }
 
-  // Anything else is an unknown URL -> 404 page (no more silent fallback to home)
-  return { page: 'not-found', params: queryObj };
-}
-
-/**
- * True when the pathname maps to a real page. Shared with the Express server so the
- * server and the React app always agree on what counts as a 404.
- */
-export function isKnownRoute(pathname: string): boolean {
-  return parseUrlToRoute(pathname, '').page !== 'not-found';
+  // Default fallback
+  return { page: 'home', params: queryObj };
 }
 
 export function routeToUrl(page: string, params?: Record<string, any>): string {
@@ -132,8 +124,6 @@ export function routeToUrl(page: string, params?: Record<string, any>): string {
     case 'admin-audit-logs': return `/admin/audit-logs${formatQuery(params)}`;
     case 'admin-api-keys': return `/admin/api-keys${formatQuery(params)}`;
     case 'admin-settings': return `/admin/settings${formatQuery(params)}`;
-
-    case 'not-found': return '/404';
 
     default:
       return `/${formatQuery(params)}`;
