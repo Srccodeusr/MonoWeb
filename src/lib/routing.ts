@@ -18,6 +18,9 @@ export function parseUrlToRoute(pathname: string, search: string): RouteState {
 
   const first = pathParts[0].toLowerCase();
 
+  // Direct link to the not-found page itself (e.g. shared/bookmarked)
+  if (first === '404' || first === 'not-found') return { page: 'not-found', params: queryObj };
+
   // Public pages
   if (first === 'home') return { page: 'home', params: queryObj };
   if (first === 'vps') return { page: 'vps', params: queryObj };
@@ -66,11 +69,13 @@ export function parseUrlToRoute(pathname: string, search: string): RouteState {
     if (sub === 'api-keys' || sub === 'keys') return { page: 'admin-api-keys', params: queryObj };
     if (sub === 'legal' || sub === 'content' || sub === 'legal-pages') return { page: 'admin-legal', params: queryObj };
     if (sub === 'settings') return { page: 'admin-settings', params: queryObj };
-    return { page: 'admin-dashboard', params: queryObj };
+    return { page: 'not-found', params: { ...queryObj, attemptedPath: pathname } };
   }
 
-  // Default fallback
-  return { page: 'home', params: queryObj };
+  // Unrecognized route - render the in-app 404 rather than silently
+  // falling back to Home, and keep the path the user actually hit so the
+  // 404 page can display it.
+  return { page: 'not-found', params: { ...queryObj, attemptedPath: pathname } };
 }
 
 export function routeToUrl(page: string, params?: Record<string, any>): string {
@@ -124,6 +129,8 @@ export function routeToUrl(page: string, params?: Record<string, any>): string {
     case 'admin-audit-logs': return `/admin/audit-logs${formatQuery(params)}`;
     case 'admin-api-keys': return `/admin/api-keys${formatQuery(params)}`;
     case 'admin-settings': return `/admin/settings${formatQuery(params)}`;
+
+    case 'not-found': return params?.attemptedPath || '/404';
 
     default:
       return `/${formatQuery(params)}`;
