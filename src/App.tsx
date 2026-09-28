@@ -26,6 +26,7 @@ import { Pricing } from './pages/public/Pricing';
 import { Status } from './pages/public/Status';
 import { Docs } from './pages/public/Docs';
 import { LegalPage } from './pages/public/LegalPage';
+import { NotFound } from './pages/public/NotFound';
 
 // Auth Pages
 import { Login } from './pages/auth/Login';
@@ -128,7 +129,7 @@ function AppContent() {
   useEffect(() => {
     if (loading) return;
 
-    const publicPages = ['home', 'bot', 'vps', 'pricing', 'status', 'docs', 'terms', 'privacy', 'acceptable-use', 'legal', 'login', 'register'];
+    const publicPages = ['home', 'bot', 'vps', 'pricing', 'status', 'docs', 'terms', 'privacy', 'acceptable-use', 'legal', 'login', 'register', 'not-found'];
     const isPublic = publicPages.includes(currentPage);
     const isAdmin = currentPage.startsWith('admin-');
 
@@ -164,7 +165,7 @@ function AppContent() {
     return null;
   }
 
-  const isPublicPage = ['home', 'bot', 'vps', 'pricing', 'status', 'docs', 'terms', 'privacy', 'acceptable-use', 'legal', 'login', 'register'].includes(currentPage);
+  const isPublicPage = ['home', 'bot', 'vps', 'pricing', 'status', 'docs', 'terms', 'privacy', 'acceptable-use', 'legal', 'login', 'register', 'not-found'].includes(currentPage);
   const isAdminPage = currentPage.startsWith('admin-');
   const isCustomerPage = !isPublicPage && !isAdminPage;
 
@@ -296,6 +297,7 @@ function AppContent() {
                 {currentPage === 'privacy' && <LegalPage initialSlug="privacy" onNavigate={handleNavigate} />}
                 {currentPage === 'acceptable-use' && <LegalPage initialSlug="acceptable-use" onNavigate={handleNavigate} />}
                 {currentPage === 'legal' && <LegalPage initialSlug={pageParams?.initialSlug || 'terms'} onNavigate={handleNavigate} />}
+                {currentPage === 'not-found' && <NotFound onNavigate={handleNavigate} attemptedPath={pageParams?.attemptedPath} />}
 
                 {/* Auth Views */}
                 {currentPage === 'login' && <Login onNavigate={handleNavigate} />}
