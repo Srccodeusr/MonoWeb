@@ -141,12 +141,10 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
               <span>{brandName} Bot &amp; VPS Hosting</span>
             </div>
 
-            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight text-white font-display leading-[1.08]">
+            <h1 className={`text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight font-display leading-[1.08] ${animate ? 'mono-heading-shimmer' : 'text-white'}`}>
               Hosting, built
               <br />
-              <span className="bg-gradient-to-r from-white via-zinc-200 to-zinc-500 bg-clip-text text-transparent">
-                without the noise.
-              </span>
+              without the noise.
             </h1>
 
             <p className="text-sm sm:text-base md:text-lg text-zinc-400 max-w-2xl mx-auto leading-relaxed">
@@ -274,7 +272,7 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
       <motion.section {...motionChildProps} className="-mx-4 lg:-mx-6 bg-black">
         <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 py-14 sm:py-20 text-center">
           <span className="text-xs font-bold tracking-[0.2em] text-zinc-500 uppercase">Infrastructure</span>
-          <h2 className="text-3xl sm:text-4xl font-bold text-white font-display mt-2 leading-tight">
+          <h2 className={`text-3xl sm:text-4xl font-bold font-display mt-2 leading-tight ${animate ? 'mono-heading-shimmer' : 'text-white'}`}>
             Built for Uptime
           </h2>
           <p className="text-xs sm:text-sm text-zinc-400 max-w-xl mx-auto mt-3 leading-relaxed">
@@ -331,7 +329,7 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
         <div className="mx-auto max-w-2xl">
           <div className="text-center mb-8 sm:mb-10 space-y-2">
             <span className="text-xs font-bold tracking-[0.2em] text-zinc-500 uppercase">Support</span>
-            <h2 className="text-2xl sm:text-3xl font-bold text-white font-display">Frequently Asked Questions</h2>
+            <h2 className={`text-2xl sm:text-3xl font-bold font-display ${animate ? 'mono-heading-shimmer' : 'text-white'}`}>Frequently Asked Questions</h2>
           </div>
 
           <div className="space-y-2.5">
