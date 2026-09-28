@@ -297,7 +297,7 @@ function AppContent() {
                 {currentPage === 'privacy' && <LegalPage initialSlug="privacy" onNavigate={handleNavigate} />}
                 {currentPage === 'acceptable-use' && <LegalPage initialSlug="acceptable-use" onNavigate={handleNavigate} />}
                 {currentPage === 'legal' && <LegalPage initialSlug={pageParams?.initialSlug || 'terms'} onNavigate={handleNavigate} />}
-                {currentPage === 'not-found' && <NotFound onNavigate={handleNavigate} attemptedPath={pageParams?.attemptedPath} />}
+                {currentPage === 'not-found' && <NotFound onNavigate={handleNavigate} />}
 
                 {/* Auth Views */}
                 {currentPage === 'login' && <Login onNavigate={handleNavigate} />}
