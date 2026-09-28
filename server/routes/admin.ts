@@ -742,6 +742,59 @@ router.put('/settings/social-links', async (req: AuthenticatedRequest, res: Resp
   res.json({ success: true, message: 'Social links updated successfully.', data: db.settings.socialLinks });
 });
 
+// GET /api/v1/admin/settings/quick-links
+// Admin-editable list of external links (e.g. "Discord Bot Panel", "VPS Panel").
+// This is what customers see in their dashboard sidebar instead of a single
+// hardcoded auto-provisioning panel redirect — admins add/edit/remove entries here.
+router.get('/settings/quick-links', async (req: AuthenticatedRequest, res: Response) => {
+  const db = await getDb();
+  res.json({ success: true, data: db.settings.quickLinks || [] });
+});
+
+// PUT /api/v1/admin/settings/quick-links
+router.put('/settings/quick-links', async (req: AuthenticatedRequest, res: Response) => {
+  if (req.user!.role !== 'admin' && req.user!.role !== 'super_admin') {
+    return res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Admin permissions required' } });
+  }
+
+  const { links } = req.body || {};
+  if (!Array.isArray(links)) {
+    return res.status(400).json({ success: false, error: { code: 'INVALID_INPUT', message: 'links must be an array' } });
+  }
+  if (links.length > 12) {
+    return res.status(400).json({ success: false, error: { code: 'TOO_MANY_LINKS', message: 'You can add up to 12 quick links.' } });
+  }
+
+  const cleaned: { id: string; label: string; url: string }[] = [];
+  for (let i = 0; i < links.length; i++) {
+    const raw = links[i] || {};
+    const label = typeof raw.label === 'string' ? raw.label.trim().slice(0, 60) : '';
+    const url = typeof raw.url === 'string' ? raw.url.trim() : '';
+
+    if (!label) {
+      return res.status(400).json({ success: false, error: { code: 'INVALID_LABEL', message: `Link #${i + 1} needs a label.` } });
+    }
+    if (url && !isValidSocialUrl(url)) {
+      return res.status(400).json({ success: false, error: { code: 'INVALID_URL', message: `The URL for "${label}" must be a valid HTTP or HTTPS link.` } });
+    }
+
+    const id = typeof raw.id === 'string' && raw.id.trim() ? raw.id.trim() : `ql_${Date.now()}_${i}`;
+    cleaned.push({ id, label, url });
+  }
+
+  const db = await getDb();
+  db.settings.quickLinks = cleaned;
+  saveDbSync();
+
+  await createAuditLog(
+    req.user!.id, req.user!.email, req.user!.role,
+    'ADMIN_UPDATE_QUICK_LINKS', 'SETTINGS',
+    `Updated admin quick links (${cleaned.length} link${cleaned.length === 1 ? '' : 's'})`
+  );
+
+  res.json({ success: true, message: 'Quick links updated successfully.', data: db.settings.quickLinks });
+});
+
 // GET /api/v1/admin/payment-settings
 router.get('/payment-settings', async (req: AuthenticatedRequest, res: Response) => {
   const db = await getDb();
@@ -1298,7 +1351,7 @@ router.post('/anti-abuse/test', async (req: AuthenticatedRequest, res: Response)
 router.get('/theme-settings', async (req: AuthenticatedRequest, res: Response) => {
   const db = await getDb();
   const defaults = {
-    activeThemeId: 'golden', activeFontId: 'Plus Jakarta Sans', cardStyle: 'rounded-2xl',
+    activeThemeId: 'golden', activeFontId: 'Quicksand', cardStyle: 'rounded-2xl',
     glowIntensity: 'vibrant', allowUserCustomization: true, backgroundBlur: 'none', backgroundOverlayOpacity: 75,
     assets: { logoUrl: '', faviconUrl: '', bgPatternUrl: '', bannerUrl: '', loginBgUrl: '' }
   };

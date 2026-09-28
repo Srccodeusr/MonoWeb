@@ -57,7 +57,7 @@ router.get('/settings', async (req: Request, res: Response) => {
   const {
     brandName, brandTagline, supportEmail, discordUrl, currencySymbol, currencyCode,
     registrationEnabled, maintenanceMode, maintenanceMessage, defaultTheme, accentColor,
-    pageAnimationsEnabled, socialLinks, heroDescription, footerDescription
+    pageAnimationsEnabled, socialLinks, heroDescription, footerDescription, quickLinks
   } = db.settings;
 
   const DEFAULT_HERO = 'Deploy 24/7 Discord bots and high-performance VPS instances in minutes. Reliable infrastructure, transparent pricing, and real support when you need it.';
@@ -80,7 +80,8 @@ router.get('/settings', async (req: Request, res: Response) => {
       accentColor,
       pageAnimationsEnabled: pageAnimationsEnabled !== false,
       heroDescription: (typeof heroDescription === 'string' && heroDescription.trim().length > 0) ? heroDescription : DEFAULT_HERO,
-      footerDescription: (typeof footerDescription === 'string' && footerDescription.trim().length > 0) ? footerDescription : DEFAULT_FOOTER
+      footerDescription: (typeof footerDescription === 'string' && footerDescription.trim().length > 0) ? footerDescription : DEFAULT_FOOTER,
+      quickLinks: (Array.isArray(quickLinks) ? quickLinks : []).filter((l: any) => l && l.url)
     }
   });
 });
@@ -100,7 +101,7 @@ router.get('/theme-settings', async (req: Request, res: Response) => {
   const db = await getDb();
   const defaults = {
     activeThemeId: 'golden',
-    activeFontId: 'Plus Jakarta Sans',
+    activeFontId: 'Quicksand',
     cardStyle: 'rounded-2xl',
     glowIntensity: 'vibrant',
     allowUserCustomization: true,
