@@ -164,3 +164,35 @@
 .animate-marquee {
   animation: mono-marquee 26s linear infinite;
 }
+
+/* Big section-header shimmer: a soft grey band sweeps across otherwise-solid
+   white heading text on a seamless loop. Used for the large white titles at
+   the top of dark sections (Home.tsx hero, "Built for Uptime", FAQ). */
+@keyframes mono-heading-shimmer {
+  to { background-position: -200% center; }
+}
+
+.mono-heading-shimmer {
+  background-image: linear-gradient(
+    to right,
+    #ffffff 20%,
+    var(--color-zinc-500) 40%,
+    var(--color-zinc-500) 60%,
+    #ffffff 80%
+  );
+  background-size: 200% auto;
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  animation: mono-heading-shimmer 3.5s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mono-heading-shimmer {
+    animation: none;
+    background-image: none;
+    -webkit-text-fill-color: initial;
+    color: #ffffff;
+  }
+}
