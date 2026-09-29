@@ -205,8 +205,8 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
               </p>
             </Reveal>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8">
-              <Reveal className="h-full"><ProductCard icon={Bot} title="Bot Hosting" price={minBotPrice} features={botFeatures} cta="Learn More" page="bot" /></Reveal>
-              <Reveal className="h-full" delay={0.15}><ProductCard icon={Server} title="VPS Hosting" price={minVpsPrice} features={vpsFeatures} cta="Learn More" page="vps" /></Reveal>
+              <Reveal className="h-full" speed={0.5}><ProductCard icon={Bot} title="Bot Hosting" price={minBotPrice} features={botFeatures} cta="Learn More" page="bot" /></Reveal>
+              <Reveal className="h-full" delay={0.15} speed={1}><ProductCard icon={Server} title="VPS Hosting" price={minVpsPrice} features={vpsFeatures} cta="Learn More" page="vps" /></Reveal>
             </div>
           </div>
 
@@ -252,7 +252,7 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
                 { icon: Bot, value: '2', label: 'Focused products' },
                 { icon: Users, value: 'Human', label: 'Support, not bots' }
               ].map(({ icon: Icon, value, label }, i) => (
-                <Reveal key={label} delay={i * 0.1} className="p-4">
+                <Reveal key={label} delay={i * 0.1} speed={0.35 + (i % 2) * 0.5} className="p-4">
                   <Icon className="h-7 w-7 text-zinc-950 mx-auto mb-4" />
                   <div className="text-4xl sm:text-6xl font-bold text-zinc-950 font-display tracking-tight">{value}</div>
                   <div className="text-sm sm:text-base text-zinc-600 mt-2">{label}</div>
@@ -285,7 +285,7 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
                 { icon: Terminal, label: 'Multi-runtime bots' },
                 { icon: Headphones, label: 'Real human support' }
               ].map(({ icon: Icon, label }, i) => (
-                <Reveal key={label} delay={(i % 3) * 0.1} className="rounded-3xl"><div className="h-full p-8 sm:p-10 rounded-3xl bg-zinc-900/60 border border-zinc-800 flex flex-col items-center gap-4 text-center hover:border-zinc-600 transition-colors">
+                <Reveal key={label} delay={(i % 3) * 0.1} speed={0.25 + (i % 3) * 0.3} className="rounded-3xl"><div className="h-full p-8 sm:p-10 rounded-3xl bg-zinc-900/60 border border-zinc-800 flex flex-col items-center gap-4 text-center hover:border-zinc-600 transition-colors">
                   <Icon className="h-8 w-8 text-white" />
                   <span className="text-base sm:text-lg font-semibold text-zinc-200 leading-snug">{label}</span>
                 </div></Reveal>
