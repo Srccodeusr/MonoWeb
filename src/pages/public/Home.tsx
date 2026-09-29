@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Bot, ShieldCheck, ArrowRight, CheckCircle2, Sparkles, Server, Users,
-  Headphones, Gauge, Lock, RotateCw, ChevronDown, Star,
-  Rocket, Terminal, Database, UserPlus, CreditCard, Play, Cpu
+  Bot, ShieldCheck, ArrowRight, CheckCircle2, Server, Users,
+  Headphones, Gauge, Lock, RotateCw, ChevronDown,
+  Terminal, Database, UserPlus, CreditCard, Play, Cpu
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useBranding } from '../../lib/BrandingContext';
 import { apiRequest } from '../../lib/api';
 import { Plan } from '../../types';
+import { HeroSlider } from '../../components/HeroSlider';
 
 interface HomeProps {
   onNavigate: (page: string) => void;
@@ -60,7 +61,7 @@ const FAQS = [
 ];
 
 export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
-  const { pageAnimationsEnabled, heroDescription, brandName, socialLinks, discordUrl } = useBranding();
+  const { pageAnimationsEnabled, brandName, socialLinks, discordUrl } = useBranding();
   const joinUrl = socialLinks?.discord || discordUrl;
   const [plans, setPlans] = useState<Plan[]>([]);
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
@@ -159,69 +160,15 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
   return (
     <motion.div {...motionDivProps} className="relative isolate">
 
-      {/* ================= HERO (dark, full height, left/low aligned) ================= */}
-      <motion.section
-        {...motionChildProps}
-        className="relative -mx-4 lg:-mx-6 -mt-4 lg:-mt-6 min-h-[calc(100svh-4rem)] flex flex-col justify-end overflow-hidden bg-black"
-      >
-        <div className="absolute inset-0 pointer-events-none -z-10">
-          <div
-            className="absolute -bottom-40 -left-40 w-[700px] sm:w-[1100px] h-[700px] rounded-full opacity-40 blur-[140px]"
-            style={{ background: 'radial-gradient(circle, rgba(255,255,255,0.16) 0%, rgba(255,255,255,0.04) 45%, rgba(0,0,0,0) 70%)' }}
-          />
-          <div
-            className="absolute inset-0 opacity-[0.07]"
-            style={{
-              backgroundImage: 'linear-gradient(to right, #fff 1px, transparent 1px), linear-gradient(to bottom, #fff 1px, transparent 1px)',
-              backgroundSize: '72px 72px',
-              maskImage: 'linear-gradient(to top, black 10%, transparent 75%)',
-              WebkitMaskImage: 'linear-gradient(to top, black 10%, transparent 75%)'
-            }}
-          />
-        </div>
-
-        <div className="mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8 pt-24 pb-16 sm:pb-24 lg:pb-28">
-          <div className="max-w-4xl text-left space-y-7 sm:space-y-9">
-            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/10 border border-white/15 text-sm font-semibold text-zinc-100 backdrop-blur-sm">
-              <Sparkles className="h-4 w-4 shrink-0" />
-              <span>{brandName} Bot &amp; VPS Hosting</span>
-            </div>
-
-            <h1 className={`text-5xl sm:text-7xl lg:text-8xl font-bold tracking-tight font-display leading-[1.02] ${animate ? 'mono-heading-shimmer' : 'text-white'}`}>
-              Hosting, built
-              <br />
-              without the noise.
-            </h1>
-
-            <p className="text-base sm:text-xl text-zinc-400 max-w-2xl leading-relaxed">
-              {heroDescription}
-            </p>
-
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 pt-2">
-              <button
-                onClick={() => onNavigate('register')}
-                className="px-9 py-4 rounded-2xl font-semibold text-zinc-950 bg-white hover:bg-zinc-200 shadow-lg shadow-black/30 hover:scale-[1.01] active:scale-[0.99] transition-all flex items-center justify-center gap-2 text-base"
-              >
-                <Rocket className="h-5 w-5" />
-                Get Started Free
-              </button>
-              <button
-                onClick={() => onNavigate('pricing')}
-                className="px-9 py-4 rounded-2xl font-semibold text-white border border-white/25 hover:bg-white/10 hover:scale-[1.01] active:scale-[0.99] transition-all flex items-center justify-center gap-2 text-base"
-              >
-                View All Plans
-                <ArrowRight className="h-5 w-5" />
-              </button>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-x-7 gap-y-3 pt-4 text-sm text-zinc-400">
-              <span className="flex items-center gap-2"><Star className="h-4 w-4 fill-current text-white" /> Real human support</span>
-              <span className="flex items-center gap-2"><ShieldCheck className="h-4 w-4" /> DDoS-protected network</span>
-              <span className="flex items-center gap-2"><Gauge className="h-4 w-4" /> Instant deployment</span>
-            </div>
-          </div>
-        </div>
-      </motion.section>
+      {/* ================= HERO (auto-rotating: Bot Hosting <-> VPS Hosting) ================= */}
+      <motion.div {...motionChildProps}>
+        <HeroSlider
+          botPrice={minBotPrice}
+          vpsPrice={minVpsPrice}
+          autoplay={animate}
+          onNavigate={onNavigate}
+        />
+      </motion.div>
 
       {/* ================= TICKER ================= */}
       <motion.div {...motionChildProps} className="-mx-4 lg:-mx-6 border-y border-zinc-800 bg-zinc-950 overflow-hidden">
