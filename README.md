@@ -148,7 +148,7 @@ Plans, pricing and features pulled live from your product catalogue.
 | **Mail** | In-dashboard inbox with unread counter, mark-all-read, delete |
 | **Activity Log** | Account activity history |
 | **Settings** | Link a Discord account, configure webhooks |
-| **Quick Links** | One-click sidebar shortcuts to whatever you choose ([details](#-panel-link--quick-links)) |
+| **Quick Links** | One-click sidebar shortcuts to whatever you choose ([details](#-panel-integration--quick-links)) |
 
 </details>
 
@@ -181,7 +181,7 @@ A built-in inbox so you can message customers without leaving the platform.
 <summary><b>🎨 Themes & fonts</b></summary>
 <br/>
 
-Ships with the **MonoNode Black & White** theme. **Chakra Petch** for headings and the logo, **Quicksand** for body text. Switch themes and fonts from **Admin → Appearance**.
+Ships with the **MonoNode Black & White** theme. **Chakra Petch** for headings and the logo, **Quicksand** for body text. Switch themes and fonts from **Admin → Fonts & Themes**.
 
 </details>
 
@@ -261,39 +261,41 @@ sequenceDiagram
 
 ## ✦ Admin panel
 
-```text
-┌────────────────────────────────────────────────────────────────────┐
-│ ◼ MONOWEB ADMIN                                     ● online   ⚙  │
-├───────────────────┬────────────────────────────────────────────────┤
-│  Overview         │   System overview                              │
-│  Users            │   ┌──────────┐ ┌──────────┐ ┌──────────┐       │
-│  Products & Plans │   │  Users   │ │  Orders  │ │ Tickets  │       │
-│  Orders & Billing │   └──────────┘ └──────────┘ └──────────┘       │
-│  Coupons          │                                                │
-│  Announcements    │   Pending approvals ▸ verify before credit     │
-│  Ad campaigns     │   Recent activity   ▸ audit trail              │
-│  Discord          │                                                │
-│  Appearance       │                                                │
-│  Support queue    │                                                │
-│  Mail             │                                                │
-│  Audit trail      │                                                │
-│  API keys         │                                                │
-│  Legal & policies │                                                │
-│  Platform settings│                                                │
-│  Panel Link       │                                                │
-└───────────────────┴────────────────────────────────────────────────┘
-```
+<div align="center">
 
-<sub>Illustrative layout of the admin navigation.</sub>
+<img src="assets/preview-admin-combined.png" alt="MonoWeb admin panel: control plane menu and system overview" width="80%" />
+
+</div>
+
+<table>
+<tr>
+<td width="50%" align="center">
+
+<img src="assets/preview-admin-menu.png" alt="Admin control plane menu" width="100%" />
+
+**Admin control plane**
+<br/><sub>Every admin tool in one sidebar</sub>
+
+</td>
+<td width="50%" align="center">
+
+<img src="assets/preview-admin-overview.png" alt="System overview dashboard" width="100%" />
+
+**System overview**
+<br/><sub>Users, revenue, orders and tickets at a glance</sub>
+
+</td>
+</tr>
+</table>
 
 <table>
 <tr>
 <td width="33%" valign="top">
 
 **People**
-- Users
-- Support queue
-- Mail
+- User Accounts
+- Support Queue
+- Mail Center
 
 </td>
 <td width="33%" valign="top">
@@ -302,29 +304,30 @@ sequenceDiagram
 - Products & Plans
 - Orders & Billing
 - Coupons
-- Ad campaigns
 
 </td>
 <td width="33%" valign="top">
 
 **Platform**
-- System overview
+- System Overview
 - Announcements
-- Discord integration
-- Appearance
-- Audit trail
-- REST API keys
-- Legal & policies
-- Platform settings
-- Panel Link
+- Discord Integration
+- Fonts & Themes
+- Audit Trail
+- REST API Keys
+- Legal & Policies
+- Platform Settings
+- Panel Integration
 
 </td>
 </tr>
 </table>
 
-### 🔗 Panel Link & Quick Links
+**System Overview** shows total users, total revenue (with the last 30 days), orders with pending approvals, and support tickets awaiting a reply. **Quick Actions** jump straight to pending orders, open tickets and coupons, and **User Snapshot** splits accounts into total, active and suspended.
 
-**Admin → Panel Link** lets you add, edit and remove **Quick Links** (label + URL, up to **12**), for example a Discord bot panel, a VPS panel or a status page.
+### 🔗 Panel Integration & Quick Links
+
+**Admin → Panel Integration** lets you add, edit and remove **Quick Links** (label + URL, up to **12**), for example a Discord bot panel, a VPS panel or a status page.
 
 - Links that have a URL appear in every customer's dashboard sidebar and open in a new tab
 - Optional **auto-provisioning** (Pterodactyl / Pelican-compatible panel via API) is available under *Advanced* and is **off by default**
@@ -597,13 +600,13 @@ Not yet. The Stripe toggle is a placeholder and is blocked server-side. Payments
 <details>
 <summary><b>Does MonoWeb manage servers or game servers?</b></summary>
 <br/>
-No. It is the website and billing side only. Optional panel auto-provisioning (Pterodactyl / Pelican-compatible) is off by default and lives under <i>Advanced</i> in Panel Link.
+No. It is the website and billing side only. Optional panel auto-provisioning (Pterodactyl / Pelican-compatible) is off by default and lives under <i>Advanced</i> in Panel Integration.
 </details>
 
 <details>
 <summary><b>How do I change the look?</b></summary>
 <br/>
-Use <b>Admin → Appearance</b> for themes and fonts, or edit the colour tokens in <code>src/index.css</code>.
+Use <b>Admin → Fonts & Themes</b> for themes and fonts, or edit the colour tokens in <code>src/index.css</code>.
 </details>
 
 ---
