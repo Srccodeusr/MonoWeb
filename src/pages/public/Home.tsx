@@ -9,7 +9,6 @@ import { useBranding } from '../../lib/BrandingContext';
 import { apiRequest } from '../../lib/api';
 import { Plan } from '../../types';
 import { HeroSlider } from '../../components/HeroSlider';
-import { Mascot } from '../../components/Mascot';
 import { Reveal, ScrollProgress, useSmoothWheel } from '../../components/animation/ScrollFx';
 
 interface HomeProps {
@@ -173,7 +172,7 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
     <motion.div {...motionDivProps} className="relative isolate">
 
       {/* ================= HERO (auto-rotating: Bot Hosting <-> VPS Hosting) ================= */}
-      <div ref={heroRef} data-mascot="hero" className="hero-wrap">
+      <div ref={heroRef} className="hero-wrap">
         <motion.div style={animate ? { y: heroY, scale: heroScale, opacity: heroFade } : undefined}>
           <HeroSlider botPrice={minBotPrice} vpsPrice={minVpsPrice} autoplay={animate} onNavigate={onNavigate} />
         </motion.div>
@@ -196,7 +195,7 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
         <div className={`${sectionWrap} py-24 sm:py-32 lg:py-40 space-y-24 sm:space-y-32`}>
 
           {/* Products */}
-          <div data-mascot="products">
+          <div>
             <Reveal className="max-w-2xl mb-12 sm:mb-16 space-y-3">
               <span className={eyebrow}>Purchase</span>
               <h2 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-zinc-950 font-display">Our Products</h2>
@@ -211,7 +210,7 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
           </div>
 
           {/* How it works — a genuine sequence */}
-          <div data-mascot="steps" className="border-t border-zinc-300 pt-20 sm:pt-28">
+          <div className="border-t border-zinc-300 pt-20 sm:pt-28">
             <Reveal className="max-w-2xl mb-12 sm:mb-16 space-y-3">
               <span className={eyebrow}>How it works</span>
               <h2 className="text-3xl sm:text-5xl font-bold text-zinc-950 font-display">Live in three steps</h2>
@@ -238,7 +237,7 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
           </div>
 
           {/* Stats */}
-          <div data-mascot="stats" className="border-t border-zinc-300 pt-20 sm:pt-28 text-center">
+          <div className="border-t border-zinc-300 pt-20 sm:pt-28 text-center">
             <Reveal><h2 className="text-3xl sm:text-5xl font-bold text-zinc-950 font-display">
               Built for developers and server owners
             </h2>
@@ -268,7 +267,7 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
         <div className={`${sectionWrap} py-24 sm:py-32 lg:py-40 space-y-24 sm:space-y-32`}>
 
           {/* Infrastructure */}
-          <div data-mascot="infra" className="text-center">
+          <div className="text-center">
             <span className={eyebrow}>Infrastructure</span>
             <h2 className={`text-4xl sm:text-5xl lg:text-6xl font-bold font-display mt-3 leading-tight ${animate ? 'mono-heading-shimmer' : 'text-white'}`}>
               Built for Uptime
@@ -294,7 +293,7 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
           </div>
 
           {/* Runtimes */}
-          <div data-mascot="runtimes" className="border-t border-zinc-800 pt-20 sm:pt-28 grid lg:grid-cols-[1fr_1.3fr] gap-12 lg:gap-20 items-center">
+          <div className="border-t border-zinc-800 pt-20 sm:pt-28 grid lg:grid-cols-[1fr_1.3fr] gap-12 lg:gap-20 items-center">
             <div className="space-y-4">
               <span className={eyebrow}>Runtimes</span>
               <h2 className="text-3xl sm:text-5xl font-bold text-white font-display">Run what you already build</h2>
@@ -323,7 +322,7 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
           </div>
 
           {/* FAQ */}
-          <div data-mascot="faq" className="border-t border-zinc-800 pt-20 sm:pt-28">
+          <div className="border-t border-zinc-800 pt-20 sm:pt-28">
             <div className="mx-auto max-w-3xl">
               <div className="text-center mb-12 space-y-3">
                 <span className={eyebrow}>Support</span>
@@ -355,7 +354,7 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
           </div>
 
           {/* Final CTA */}
-          <div data-mascot="cta" className="rounded-[2rem] bg-white p-10 sm:p-16 lg:p-20 text-center space-y-6 shadow-2xl">
+          <div className="rounded-[2rem] bg-white p-10 sm:p-16 lg:p-20 text-center space-y-6 shadow-2xl">
             <h2 className="text-3xl sm:text-5xl lg:text-6xl font-bold text-zinc-950 font-display">Ready to launch?</h2>
             <p className="text-zinc-600 text-base sm:text-lg max-w-xl mx-auto leading-relaxed">
               Create a free account and deploy your first bot or server in minutes. Free migration assistance available.
@@ -388,12 +387,7 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
         </div>
       </motion.section>
 
-      {animate && (
-        <>
-          <ScrollProgress />
-          <Mascot />
-        </>
-      )}
+      {animate && <ScrollProgress />}
     </motion.div>
   );
 };
