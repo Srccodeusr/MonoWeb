@@ -20,6 +20,7 @@
 
 <br/>
 
+[**Preview**](#-preview) ·
 [**Features**](#-features) ·
 [**Quick start**](#-quick-start) ·
 [**Architecture**](#-architecture) ·
@@ -60,6 +61,37 @@ Plans, pricing and features pulled live from your product catalogue.
 
 > [!NOTE]
 > MonoWeb is a trimmed, re-themed and extended build of the open-source **AetherPanel** codebase. It keeps only the **website and billing side** of a hosting business and contains **no game-server management**. It is not a server control panel.
+
+---
+
+## ◼ Preview
+
+<div align="center">
+
+<img src="assets/preview-combined.png" alt="MonoWeb preview: Discord Bot Hosting and VPS Hosting pages" width="80%" />
+
+</div>
+
+<table>
+<tr>
+<td width="50%" align="center">
+
+<img src="assets/preview-discord-bot.png" alt="Discord Bot Hosting page" width="100%" />
+
+**Discord Bot Hosting**
+<br/><sub>Node.js, Python, Bun & Go, always on</sub>
+
+</td>
+<td width="50%" align="center">
+
+<img src="assets/preview-vps.png" alt="VPS Hosting page" width="100%" />
+
+**VPS Hosting**
+<br/><sub>Full root access, any OS image</sub>
+
+</td>
+</tr>
+</table>
 
 ---
 
