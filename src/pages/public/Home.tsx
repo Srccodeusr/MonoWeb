@@ -4,12 +4,12 @@ import {
   Headphones, Gauge, Lock, RotateCw, ChevronDown,
   Terminal, Database, UserPlus, CreditCard, Play, Cpu
 } from 'lucide-react';
-import { motion, useScroll, useSpring, useTransform, useVelocity } from 'motion/react';
+import { motion } from 'motion/react';
 import { useBranding } from '../../lib/BrandingContext';
 import { apiRequest } from '../../lib/api';
 import { Plan } from '../../types';
 import { HeroSlider } from '../../components/HeroSlider';
-import { Reveal, ScrollProgress, useSmoothWheel } from '../../components/animation/ScrollFx';
+import { Reveal, ScrollProgress, useHeroScroll, useScrollingFlag, useSmoothWheel } from '../../components/animation/ScrollFx';
 
 interface HomeProps {
   onNavigate: (page: string) => void;
@@ -61,6 +61,48 @@ const FAQS = [
   }
 ];
 
+interface ProductCardProps {
+  icon: React.ComponentType<{ className?: string }>;
+  title: string;
+  price: number;
+  features: string[];
+  cta: string;
+  page: string;
+  onNavigate: (page: string) => void;
+}
+
+// Module-level on purpose: a component declared inside Home gets a new identity every render and remounts.
+const ProductCard: React.FC<ProductCardProps> = ({ icon: Icon, title, price, features, cta, page, onNavigate }) => (
+  <div className="h-full rounded-3xl border border-zinc-300 bg-white p-8 sm:p-10 lg:p-12 flex flex-col justify-between shadow-sm hover:shadow-2xl hover:-translate-y-1 transition-all duration-300">
+    <div className="space-y-8">
+      <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-zinc-950 text-white">
+        <Icon className="h-8 w-8" />
+      </div>
+      <div>
+        <h3 className="text-2xl sm:text-3xl font-bold text-zinc-950 font-display">{title}</h3>
+        <p className="text-sm text-zinc-500 mt-2">Starting at</p>
+        <p className="text-5xl sm:text-6xl font-bold text-zinc-950 font-display tracking-tight">
+          ${price.toFixed(2)}<span className="text-base font-medium text-zinc-500 tracking-normal">/month</span>
+        </p>
+      </div>
+      <ul className="space-y-3.5 text-sm sm:text-base text-zinc-700">
+        {features.map((f, i) => (
+          <li key={i} className="flex items-start gap-3">
+            <CheckCircle2 className="h-5 w-5 text-zinc-950 shrink-0 mt-0.5" />
+            <span>{f}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+    <button
+      onClick={() => onNavigate(page)}
+      className="w-full py-4 rounded-2xl font-semibold text-base bg-zinc-950 text-white hover:bg-zinc-800 transition-colors flex items-center justify-center gap-2 mt-10"
+    >
+      {cta} <ArrowRight className="h-5 w-5" />
+    </button>
+  </div>
+);
+
 export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
   const { pageAnimationsEnabled, brandName, socialLinks, discordUrl } = useBranding();
   const joinUrl = socialLinks?.discord || discordUrl;
@@ -111,14 +153,11 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
 
   const animate = pageAnimationsEnabled && !prefersReducedMotion;
 
-  // scroll-driven effects: hero parallax, velocity skew on the ticker, inertial wheel scrolling
+  // scroll-driven effects: hero parallax (+ pause its animations off-screen), inertial wheel scrolling
   const heroRef = useRef<HTMLDivElement>(null);
-  const { scrollYProgress: heroProgress } = useScroll({ target: heroRef, offset: ['start start', 'end start'] });
-  const heroY = useTransform(heroProgress, [0, 1], ['0%', '24%']);
-  const heroScale = useTransform(heroProgress, [0, 1], [1, 1.1]);
-  const heroFade = useTransform(heroProgress, [0, 0.85], [1, 0.1]);
-  const { scrollY } = useScroll();
-  const tickerSkew = useTransform(useSpring(useVelocity(scrollY), { stiffness: 260, damping: 50 }), [-2600, 2600], [-8, 8]);
+  const heroLayerRef = useRef<HTMLDivElement>(null);
+  useHeroScroll(heroRef, heroLayerRef, animate);
+  useScrollingFlag(animate);
   useSmoothWheel(animate);
 
   const containerVariants = {
@@ -137,57 +176,26 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
   const sectionWrap = 'mx-auto max-w-6xl px-4 sm:px-6 lg:px-8';
   const eyebrow = 'text-sm font-semibold text-zinc-500';
 
-  const ProductCard = ({ icon: Icon, title, price, features, cta, page }: any) => (
-    <div className="h-full rounded-3xl border border-zinc-300 bg-white p-8 sm:p-10 lg:p-12 flex flex-col justify-between shadow-sm hover:shadow-2xl hover:-translate-y-1 transition-all duration-300">
-      <div className="space-y-8">
-        <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-zinc-950 text-white">
-          <Icon className="h-8 w-8" />
-        </div>
-        <div>
-          <h3 className="text-2xl sm:text-3xl font-bold text-zinc-950 font-display">{title}</h3>
-          <p className="text-sm text-zinc-500 mt-2">Starting at</p>
-          <p className="text-5xl sm:text-6xl font-bold text-zinc-950 font-display tracking-tight">
-            ${price.toFixed(2)}<span className="text-base font-medium text-zinc-500 tracking-normal">/month</span>
-          </p>
-        </div>
-        <ul className="space-y-3.5 text-sm sm:text-base text-zinc-700">
-          {features.map((f: string, i: number) => (
-            <li key={i} className="flex items-start gap-3">
-              <CheckCircle2 className="h-5 w-5 text-zinc-950 shrink-0 mt-0.5" />
-              <span>{f}</span>
-            </li>
-          ))}
-        </ul>
-      </div>
-      <button
-        onClick={() => onNavigate(page)}
-        className="w-full py-4 rounded-2xl font-semibold text-base bg-zinc-950 text-white hover:bg-zinc-800 transition-colors flex items-center justify-center gap-2 mt-10"
-      >
-        {cta} <ArrowRight className="h-5 w-5" />
-      </button>
-    </div>
-  );
-
   return (
     <motion.div {...motionDivProps} className="relative isolate">
 
       {/* ================= HERO (auto-rotating: Bot Hosting <-> VPS Hosting) ================= */}
       <div ref={heroRef} className="hero-wrap">
-        <motion.div style={animate ? { y: heroY, scale: heroScale, opacity: heroFade } : undefined}>
+        <div ref={heroLayerRef} className="hero-layer">
           <HeroSlider botPrice={minBotPrice} vpsPrice={minVpsPrice} autoplay={animate} onNavigate={onNavigate} />
-        </motion.div>
+        </div>
       </div>
 
       {/* ================= TICKER ================= */}
       <motion.div {...motionChildProps} className="-mx-4 lg:-mx-6 border-y border-zinc-800 bg-zinc-950 overflow-hidden">
-        <motion.div style={animate ? { skewX: tickerSkew } : undefined} className={`flex w-max whitespace-nowrap py-4 text-xs sm:text-sm font-bold tracking-widest text-zinc-400 font-mono ${animate ? 'animate-marquee' : ''}`}>
+        <div className={`flex w-max whitespace-nowrap py-4 text-xs sm:text-sm font-bold tracking-widest text-zinc-400 font-mono ${animate ? 'animate-marquee' : ''}`}>
           {[...TICKER_ITEMS, ...TICKER_ITEMS].map((item, i) => (
             <span key={i} className="flex items-center">
               <span className="px-6">{item}</span>
               <span className="text-zinc-700">•</span>
             </span>
           ))}
-        </motion.div>
+        </div>
       </motion.div>
 
       {/* ================= LIGHT SECTION (Products + How it works + Stats merged) ================= */}
@@ -204,8 +212,8 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
               </p>
             </Reveal>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8">
-              <Reveal className="h-full" speed={0.5}><ProductCard icon={Bot} title="Bot Hosting" price={minBotPrice} features={botFeatures} cta="Learn More" page="bot" /></Reveal>
-              <Reveal className="h-full" delay={0.15} speed={1}><ProductCard icon={Server} title="VPS Hosting" price={minVpsPrice} features={vpsFeatures} cta="Learn More" page="vps" /></Reveal>
+              <Reveal className="h-full" speed={0.5}><ProductCard icon={Bot} title="Bot Hosting" price={minBotPrice} features={botFeatures} cta="Learn More" page="bot" onNavigate={onNavigate} /></Reveal>
+              <Reveal className="h-full" delay={0.15} speed={1}><ProductCard icon={Server} title="VPS Hosting" price={minVpsPrice} features={vpsFeatures} cta="Learn More" page="vps" onNavigate={onNavigate} /></Reveal>
             </div>
           </div>
 
