@@ -1,21 +1,103 @@
-MIT License
+MonoWeb Attribution License
+Copyright (c) 2026 Srccodeusr. All rights reserved except as granted below.
 
-Copyright (c) 2023-2026 Ym0T
+────────────────────────────────────────────────────────────────────────
+1. PERMISSION
+────────────────────────────────────────────────────────────────────────
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+Permission is granted, free of charge, to any person obtaining a copy of
+this software and its associated files (the "Software") to:
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+  a) use the Software, including for commercial purposes;
+  b) modify the Software;
+  c) rebrand the Software, including its name, logo, colours, fonts,
+     text and design;
+  d) host it and run it as a website or service; and
+  e) distribute copies of the Software, modified or unmodified.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+────────────────────────────────────────────────────────────────────────
+2. CONDITION: CREDIT IS REQUIRED
+────────────────────────────────────────────────────────────────────────
+
+Every use of the Software, including rebranded or modified versions,
+must give visible credit to the original author for the source code and
+for the overall code of the website:
+
+  a) Keep this license file, unmodified, in every copy or distribution
+     of the source code.
+
+  b) Keep the following credit in the README of any public repository
+     containing the Software or a derivative of it:
+
+         Built on MonoWeb by Srccodeusr
+         https://github.com/Srccodeusr/MonoWeb
+
+  c) For any website or service running the Software, display the credit
+     "Powered by MonoWeb by Srccodeusr" (linking to the repository URL
+     above) in a place visitors can reasonably find, such as the site
+     footer or an About / Credits page.
+
+Rebranding the Software does not remove this obligation. You may change
+everything a visitor sees, but the credit above must remain.
+
+────────────────────────────────────────────────────────────────────────
+3. WHAT YOU MAY NOT DO
+────────────────────────────────────────────────────────────────────────
+
+  a) Remove or hide the credit required by Section 2.
+  b) Claim that you wrote the original source code.
+  c) Suggest that the original author endorses your website, service or
+     modified version.
+
+────────────────────────────────────────────────────────────────────────
+4. THIRD-PARTY CODE (AETHERPANEL, MIT LICENSE)
+────────────────────────────────────────────────────────────────────────
+
+Parts of this Software are derived from the open-source AetherPanel
+project, which is released under the MIT License. The grant in Section 1
+and the conditions above apply to the modifications and additions made
+in MonoWeb. They do not replace, reduce or remove the original MIT
+License, which continues to apply to the AetherPanel code and whose
+copyright and permission notice must be kept, as reproduced below.
+
+  [PASTE THE ORIGINAL AETHERPANEL COPYRIGHT LINE HERE, exactly as it
+   appears in the previous LICENSE file]
+
+  Permission is hereby granted, free of charge, to any person obtaining a
+  copy of this software and associated documentation files (the
+  "Software"), to deal in the Software without restriction, including
+  without limitation the rights to use, copy, modify, merge, publish,
+  distribute, sublicense, and/or sell copies of the Software, and to
+  permit persons to whom the Software is furnished to do so, subject to
+  the following conditions:
+
+  The above copyright notice and this permission notice shall be included
+  in all copies or substantial portions of the Software.
+
+  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+  OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+  MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+  IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+  CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+  TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+  SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+────────────────────────────────────────────────────────────────────────
+5. TERMINATION
+────────────────────────────────────────────────────────────────────────
+
+If you break the conditions in Sections 2 or 3, your permission under
+Section 1 ends. It is restored if you fix the breach within 30 days of
+becoming aware of it.
+
+────────────────────────────────────────────────────────────────────────
+6. NO WARRANTY
+────────────────────────────────────────────────────────────────────────
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+OR IMPLIED, INCLUDING BUT NOT LIMITED TO WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+THE AUTHOR BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
