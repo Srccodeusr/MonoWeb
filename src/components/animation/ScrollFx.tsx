@@ -1,43 +1,49 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { motion, useReducedMotion, useScroll, useSpring } from 'motion/react';
+import { motion, useReducedMotion, useScroll, useSpring, useTransform } from 'motion/react';
 import { useBranding } from '../../lib/BrandingContext';
 
-/** Fades, lifts and un-blurs its children the first time they scroll into view. */
+/** 3D tilt-in reveal (spring + blur) the first time an element scrolls into view; `speed` adds scroll-linked depth drift. */
 export const Reveal: React.FC<{
   children: React.ReactNode;
   delay?: number;
   y?: number;
+  speed?: number;
   className?: string;
   as?: 'div' | 'li';
-}> = ({ children, delay = 0, y = 56, className, as = 'div' }) => {
+}> = ({ children, delay = 0, y = 72, speed = 0, className, as = 'div' }) => {
   const { pageAnimationsEnabled } = useBranding();
   const reduce = useReducedMotion();
-  const Tag = motion[as];
+  const ref = useRef<HTMLElement>(null);
+  const { scrollYProgress } = useScroll({ target: ref, offset: ['start end', 'end start'] });
+  const drift = useSpring(useTransform(scrollYProgress, [0, 1], [speed * 70, speed * -70]), { stiffness: 90, damping: 26 });
+  const Tag = motion[as] as any;
   if (!pageAnimationsEnabled || reduce) return React.createElement(as, { className }, children);
   return (
     <Tag
+      ref={ref}
       className={className}
-      initial={{ opacity: 0, y, scale: 0.96, filter: 'blur(12px)' }}
-      whileInView={{ opacity: 1, y: 0, scale: 1, filter: 'blur(0px)' }}
-      viewport={{ once: true, margin: '0px 0px -12% 0px' }}
-      transition={{ duration: 1, delay, ease: [0.16, 1, 0.3, 1] }}
+      style={{ transformPerspective: 1100 }}
+      initial={{ opacity: 0, y, rotateX: 14, scale: 0.94, filter: 'blur(14px)' }}
+      whileInView={{ opacity: 1, y: 0, rotateX: 0, scale: 1, filter: 'blur(0px)' }}
+      viewport={{ once: true, margin: '0px 0px -14% 0px' }}
+      transition={{ type: 'spring', stiffness: 70, damping: 18, delay, opacity: { duration: 0.7, delay }, filter: { duration: 0.8, delay } }}
     >
-      {children}
+      {speed ? <motion.div style={{ y: drift }} className="h-full">{children}</motion.div> : children}
     </Tag>
   );
 };
 
-/** Thin spring-smoothed reading-progress bar pinned to the top of the screen. */
+/** Spring-smoothed reading-progress bar with a glowing head. */
 export const ScrollProgress: React.FC = () => {
   const { scrollYProgress } = useScroll();
-  const scaleX = useSpring(scrollYProgress, { stiffness: 120, damping: 28, restDelta: 0.001 });
+  const p = useSpring(scrollYProgress, { stiffness: 120, damping: 28, restDelta: 0.001 });
+  const left = useTransform(p, v => `${v * 100}%`);
   return createPortal(
-    <motion.div
-      aria-hidden="true"
-      style={{ scaleX, transformOrigin: '0 50%' }}
-      className="fixed left-0 top-0 z-[45] h-[3px] w-full bg-gradient-to-r from-zinc-500 via-white to-blue-400"
-    />,
+    <div aria-hidden="true" className="pointer-events-none fixed left-0 top-0 z-[45] h-[3px] w-full">
+      <motion.div style={{ scaleX: p, transformOrigin: '0 50%' }} className="h-full w-full bg-gradient-to-r from-transparent via-blue-500 to-white" />
+      <motion.span style={{ left }} className="absolute top-1/2 h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white shadow-[0_0_14px_5px_rgba(96,165,250,0.9)]" />
+    </div>,
     document.body
   );
 };
