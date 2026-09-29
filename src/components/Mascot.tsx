@@ -26,30 +26,42 @@ const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 const CARDS = [['#3b82f6', '#1d4ed8'], ['#8b5cf6', '#6d28d9'], ['#10b981', '#047857']];
 
 const Robot: React.FC<{ pose: Pose; walking: boolean; face: 1 | -1 }> = ({ pose, walking, face }) => (
-  <svg viewBox="0 0 150 160" className="bot" data-act={pose} data-walk={walking} style={{ transform: `scaleX(${face})` }}>
+  <svg viewBox="0 0 150 160" className="bot" data-act={pose} data-fly={walking} style={{ transform: `scaleX(${face})` }}>
     <defs>
-      <linearGradient id="mb-g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#fafafa" /><stop offset="1" stopColor="#a1a1aa" /></linearGradient>
+      <linearGradient id="mb-w" x1="0" y1="0" x2="0.9" y2="1"><stop offset="0" stopColor="#fff" /><stop offset=".55" stopColor="#e4e7ee" /><stop offset="1" stopColor="#9aa3b5" /></linearGradient>
+      <linearGradient id="mb-d" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#1e2a4a" /><stop offset="1" stopColor="#060911" /></linearGradient>
+      <radialGradient id="mb-e"><stop offset="0" stopColor="#e0f7ff" /><stop offset=".5" stopColor="#67e8f9" /><stop offset="1" stopColor="#0ea5e9" stopOpacity="0" /></radialGradient>
+      <linearGradient id="mb-f" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#fff" /><stop offset=".3" stopColor="#7dd3fc" /><stop offset="1" stopColor="#3b82f6" stopOpacity="0" /></linearGradient>
       <clipPath id="mb-tab"><rect x="70" y="77" width="42" height="52" rx="4" /></clipPath>
     </defs>
     <ellipse cx="48" cy="152" rx="28" ry="5" fill="rgba(0,0,0,.4)" />
     <g className="fig">
-      <g className="leg-l"><rect x="34" y="112" width="11" height="30" rx="5.5" fill="#d4d4d8" /><rect x="30" y="138" width="18" height="9" rx="4.5" fill="#71717a" /></g>
-      <g className="leg-r"><rect x="51" y="112" width="11" height="30" rx="5.5" fill="#e4e4e7" /><rect x="48" y="138" width="18" height="9" rx="4.5" fill="#71717a" /></g>
-      <g className="arm-l"><rect x="15" y="76" width="10" height="30" rx="5" fill="#d4d4d8" /><circle cx="20" cy="107" r="6" fill="#71717a" /></g>
-      <rect x="24" y="70" width="48" height="46" rx="17" fill="url(#mb-g)" />
-      <rect x="35" y="83" width="26" height="18" rx="7" fill="#0b0b10" />
-      <circle cx="48" cy="92" r="4.5" fill="#60a5fa" className="ant" />
+      <g className="jet"><path className="jetf" d="M11 108h14q-3 30-7 42q-4-12-7-42z" fill="url(#mb-f)" /><rect x="8" y="74" width="19" height="36" rx="8" fill="#4b5263" /><rect x="11" y="79" width="13" height="4" rx="2" fill="#7dd3fc" /><rect x="8" y="100" width="19" height="6" rx="3" fill="#2f3543" /></g>
+      <g className="leg-l"><rect x="34" y="110" width="12" height="30" rx="6" fill="url(#mb-w)" /><rect x="29" y="136" width="20" height="11" rx="5.5" fill="#4b5263" /><rect x="31" y="137" width="12" height="3" rx="1.5" fill="#fff" opacity=".35" /></g>
+      <g className="leg-r"><rect x="51" y="110" width="12" height="30" rx="6" fill="url(#mb-w)" /><rect x="47" y="136" width="20" height="11" rx="5.5" fill="#4b5263" /><rect x="49" y="137" width="12" height="3" rx="1.5" fill="#fff" opacity=".35" /></g>
+      <g className="arm-l"><rect x="14.5" y="74" width="12" height="33" rx="6" fill="url(#mb-w)" /><circle cx="20.5" cy="108" r="7.5" fill="#4b5263" /><circle cx="18" cy="105.5" r="2" fill="#fff" opacity=".5" /></g>
+      <rect x="23" y="66" width="50" height="50" rx="20" fill="url(#mb-w)" />
+      <path d="M29 76q-3 16 1 31" stroke="#fff" strokeWidth="3" opacity=".85" fill="none" strokeLinecap="round" />
+      <rect x="33" y="80" width="30" height="22" rx="9" fill="url(#mb-d)" />
+      <path className="ant" d="M39 96v-10l9 7l9-7v10" stroke="#67e8f9" strokeWidth="2.6" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+      <rect x="26" y="108" width="44" height="6" rx="3" fill="#5b6478" />
       <g className="head">
-        <rect x="41" y="62" width="14" height="10" fill="#71717a" />
-        <rect x="8" y="30" width="9" height="16" rx="4" fill="#a1a1aa" /><rect x="79" y="30" width="9" height="16" rx="4" fill="#a1a1aa" />
-        <line x1="48" y1="13" x2="48" y2="3" stroke="#a1a1aa" strokeWidth="3" strokeLinecap="round" /><circle cx="48" cy="3" r="4" fill="#60a5fa" className="ant" />
-        <rect x="14" y="12" width="68" height="54" rx="22" fill="url(#mb-g)" />
-        <rect x="21" y="21" width="54" height="36" rx="15" fill="#0b0b10" />
-        <ellipse className="eye" cx="37" cy="38" rx="5" ry="7" fill="#7dd3fc" /><ellipse className="eye" cx="59" cy="38" rx="5" ry="7" fill="#7dd3fc" />
-        <circle cx="28" cy="47" r="3" fill="#f472b6" opacity=".55" /><circle cx="68" cy="47" r="3" fill="#f472b6" opacity=".55" />
-        <path d="M42 47q6 6 12 0" stroke="#7dd3fc" strokeWidth="2.5" fill="none" strokeLinecap="round" />
+        <rect x="5" y="28" width="12" height="21" rx="6" fill="#5b6478" /><rect x="79" y="28" width="12" height="21" rx="6" fill="#5b6478" />
+        <circle className="ant" cx="11" cy="38.5" r="2.4" fill="#67e8f9" /><circle className="ant" cx="85" cy="38.5" r="2.4" fill="#67e8f9" />
+        <line x1="48" y1="12" x2="48" y2="4" stroke="#8a93a6" strokeWidth="3" strokeLinecap="round" />
+        <circle cx="48" cy="4" r="9" fill="url(#mb-e)" opacity=".55" className="ant" /><circle cx="48" cy="4" r="4.3" fill="#a5f3fc" />
+        <rect x="12" y="10" width="72" height="58" rx="27" fill="url(#mb-w)" />
+        <rect x="18" y="17" width="60" height="44" rx="20" fill="url(#mb-d)" />
+        <path d="M25 27q11-8 24-8l-15 28q-9-3-9-20z" fill="#fff" opacity=".13" />
+        {[36, 60].map(cx => (
+          <g key={cx} transform={`translate(${cx} 39)`}><g className="eye">
+            <ellipse rx="9" ry="11" fill="url(#mb-e)" opacity=".55" /><rect x="-4.6" y="-7.5" width="9.2" height="15" rx="4.6" fill="#a5f3fc" /><circle cx="-1.4" cy="-3.4" r="2.1" fill="#fff" />
+          </g></g>
+        ))}
+        <ellipse cx="27" cy="50" rx="4" ry="2.4" fill="#f472b6" opacity=".5" /><ellipse cx="69" cy="50" rx="4" ry="2.4" fill="#f472b6" opacity=".5" />
+        <path d="M43 51q5 5 10 0" stroke="#a5f3fc" strokeWidth="2.4" fill="none" strokeLinecap="round" />
       </g>
-      <g className="arm-r"><rect x="71" y="76" width="10" height="30" rx="5" fill="#e4e4e7" /><circle cx="76" cy="107" r="6" fill="#71717a" /></g>
+      <g className="arm-r"><rect x="70.5" y="74" width="12" height="33" rx="6" fill="url(#mb-w)" /><circle cx="76.5" cy="108" r="7.5" fill="#4b5263" /><circle cx="74" cy="105.5" r="2" fill="#fff" opacity=".5" /></g>
     </g>
 
     {pose === 'shop' && (
@@ -132,7 +144,8 @@ export const Mascot: React.FC = () => {
   const lean = useTransform(vel, [-2600, 0, 2600], [-7, 0, 7]);
   const stretch = useTransform(vel, [-2600, 0, 2600], [1.07, 1, 1.07]);
   const hop = useAnimationControls();
-  const st = useRef({ key: '', want: '', busy: false, ready: false, side: 'right' as 'left' | 'right', size });
+  const rootRef = useRef<HTMLDivElement>(null);
+  const st = useRef({ key: '', want: '', busy: false, ready: false, side: 'right' as 'left' | 'right', flying: false, face: -1, size });
   st.current.size = size;
 
   useEffect(() => {
@@ -168,21 +181,23 @@ export const Mascot: React.FC = () => {
       const tx = edge(stop.side), dx = tx - x.get();
       if (Math.abs(dx) > 4) {
         const dir: 1 | -1 = dx > 0 ? 1 : -1;
-        setFace(dir); setPose('idle'); setWalking(true);
+        setFace(dir); s.face = dir; s.flying = true; setPose('idle'); setWalking(true);
+        await hop.start({ scaleY: 0.82, transition: { duration: 0.17 } });                       // crouch
         await Promise.all([
-          animate(x, tx, { duration: 1.3, ease: [0.65, 0, 0.35, 1] }),
+          animate(x, tx, { duration: 1.45, ease: [0.65, 0, 0.35, 1] }),
           hop.start({
-            y: [0, -96, 0], rotate: [0, dir * 12, 0],
-            transition: { y: { duration: 1.3, times: [0, 0.5, 1], ease: ['easeOut', 'easeIn'] }, rotate: { duration: 1.3, times: [0, 0.5, 1] } }
+            y: [0, -130, -130, 0], rotate: [0, dir * 18, dir * 18, 0], scaleY: [0.82, 1.1, 1.02, 1],
+            transition: { duration: 1.45, times: [0, 0.34, 0.7, 1], ease: 'easeInOut' }
           })
         ]);
-        setWalking(false);
+        s.flying = false; setWalking(false);
+        hop.start({ scaleY: [0.8, 1.06, 1], transition: { duration: 0.42 } });                   // landing squash
       } else {
         await hop.start({ y: [0, -24, 0], transition: { duration: 0.5 } });
       }
       if (dead) return;
       s.side = stop.side; setSide(stop.side);
-      setFace(stop.side === 'right' ? -1 : 1); setPose(stop.act); setSay(stop.say);
+      s.face = stop.side === 'right' ? -1 : 1; setFace(s.face as 1 | -1); setPose(stop.act); setSay(stop.say);
       s.busy = false;
       if (s.want && s.want !== key) { const w = s.want; s.want = ''; go(w); }
     };
@@ -226,10 +241,29 @@ export const Mascot: React.FC = () => {
       onScroll();
     })();
 
+    // eyes follow the pointer and the scroll direction; the jet flame follows scroll speed
+    let mx = 0, my = 0, tick = 0;
+    const onMove = (e: PointerEvent) => {
+      const r = rootRef.current?.getBoundingClientRect(); if (!r) return;
+      mx = (e.clientX - (r.left + r.width / 2)) / window.innerWidth; my = (e.clientY - r.top) / window.innerHeight - 0.35;
+    };
+    const loop = () => {
+      const el = rootRef.current?.querySelector<SVGElement>('.bot');
+      if (el) {
+        const v = vel.get(), th = Math.min(1, Math.abs(v) / 1800), clamp = (n: number, m: number) => Math.max(-m, Math.min(m, n));
+        el.style.setProperty('--th', String(s.flying ? Math.max(0.6, th) : th));
+        el.style.setProperty('--ex', String(clamp(mx * 10, 3.4) * s.face));
+        el.style.setProperty('--ey', String(clamp(my * 6 + v / 650, 3.2)));
+      }
+      tick = requestAnimationFrame(loop);
+    };
+    tick = requestAnimationFrame(loop);
+    window.addEventListener('pointermove', onMove, { passive: true });
+
     window.addEventListener('scroll', onScroll, { passive: true });
     window.addEventListener('resize', onResize);
     return () => {
-      dead = true; cancelAnimationFrame(raf);
+      dead = true; cancelAnimationFrame(raf); cancelAnimationFrame(tick); window.removeEventListener('pointermove', onMove);
       window.removeEventListener('scroll', onScroll);
       window.removeEventListener('resize', onResize);
     };
@@ -237,7 +271,8 @@ export const Mascot: React.FC = () => {
 
   const head = side === 'right' ? { right: '58%' } : { left: '58%' };
   return createPortal(
-    <motion.div className="mascot" aria-hidden="true" style={{ x, y: topSpring, width: size }}>
+    <motion.div ref={rootRef} className="mascot" aria-hidden="true" style={{ x, y: topSpring, width: size }}>
+      <div className="mascot__aura" data-act={pose} />
       <AnimatePresence>
         {say && (
           <motion.div
