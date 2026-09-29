@@ -1,14 +1,16 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Bot, ShieldCheck, ArrowRight, CheckCircle2, Server, Users,
   Headphones, Gauge, Lock, RotateCw, ChevronDown,
   Terminal, Database, UserPlus, CreditCard, Play, Cpu
 } from 'lucide-react';
-import { motion } from 'motion/react';
+import { motion, useScroll, useSpring, useTransform, useVelocity } from 'motion/react';
 import { useBranding } from '../../lib/BrandingContext';
 import { apiRequest } from '../../lib/api';
 import { Plan } from '../../types';
 import { HeroSlider } from '../../components/HeroSlider';
+import { Mascot } from '../../components/Mascot';
+import { Reveal, ScrollProgress, useSmoothWheel } from '../../components/animation/ScrollFx';
 
 interface HomeProps {
   onNavigate: (page: string) => void;
@@ -110,6 +112,16 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
 
   const animate = pageAnimationsEnabled && !prefersReducedMotion;
 
+  // scroll-driven effects: hero parallax, velocity skew on the ticker, inertial wheel scrolling
+  const heroRef = useRef<HTMLDivElement>(null);
+  const { scrollYProgress: heroProgress } = useScroll({ target: heroRef, offset: ['start start', 'end start'] });
+  const heroY = useTransform(heroProgress, [0, 1], ['0%', '24%']);
+  const heroScale = useTransform(heroProgress, [0, 1], [1, 1.1]);
+  const heroFade = useTransform(heroProgress, [0, 0.85], [1, 0.1]);
+  const { scrollY } = useScroll();
+  const tickerSkew = useTransform(useSpring(useVelocity(scrollY), { stiffness: 260, damping: 50 }), [-2600, 2600], [-8, 8]);
+  useSmoothWheel(animate);
+
   const containerVariants = {
     hidden: { opacity: 0 },
     visible: { opacity: 1, transition: { staggerChildren: 0.08, delayChildren: 0.05 } }
@@ -127,7 +139,7 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
   const eyebrow = 'text-sm font-semibold text-zinc-500';
 
   const ProductCard = ({ icon: Icon, title, price, features, cta, page }: any) => (
-    <div className="rounded-3xl border border-zinc-300 bg-white p-8 sm:p-10 lg:p-12 flex flex-col justify-between shadow-sm hover:shadow-2xl hover:-translate-y-1 transition-all duration-300">
+    <div className="h-full rounded-3xl border border-zinc-300 bg-white p-8 sm:p-10 lg:p-12 flex flex-col justify-between shadow-sm hover:shadow-2xl hover:-translate-y-1 transition-all duration-300">
       <div className="space-y-8">
         <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-zinc-950 text-white">
           <Icon className="h-8 w-8" />
@@ -161,25 +173,22 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
     <motion.div {...motionDivProps} className="relative isolate">
 
       {/* ================= HERO (auto-rotating: Bot Hosting <-> VPS Hosting) ================= */}
-      <motion.div {...motionChildProps}>
-        <HeroSlider
-          botPrice={minBotPrice}
-          vpsPrice={minVpsPrice}
-          autoplay={animate}
-          onNavigate={onNavigate}
-        />
-      </motion.div>
+      <div ref={heroRef} data-mascot="hero" className="hero-wrap">
+        <motion.div style={animate ? { y: heroY, scale: heroScale, opacity: heroFade } : undefined}>
+          <HeroSlider botPrice={minBotPrice} vpsPrice={minVpsPrice} autoplay={animate} onNavigate={onNavigate} />
+        </motion.div>
+      </div>
 
       {/* ================= TICKER ================= */}
       <motion.div {...motionChildProps} className="-mx-4 lg:-mx-6 border-y border-zinc-800 bg-zinc-950 overflow-hidden">
-        <div className={`flex w-max whitespace-nowrap py-4 text-xs sm:text-sm font-bold tracking-widest text-zinc-400 font-mono ${animate ? 'animate-marquee' : ''}`}>
+        <motion.div style={animate ? { skewX: tickerSkew } : undefined} className={`flex w-max whitespace-nowrap py-4 text-xs sm:text-sm font-bold tracking-widest text-zinc-400 font-mono ${animate ? 'animate-marquee' : ''}`}>
           {[...TICKER_ITEMS, ...TICKER_ITEMS].map((item, i) => (
             <span key={i} className="flex items-center">
               <span className="px-6">{item}</span>
               <span className="text-zinc-700">•</span>
             </span>
           ))}
-        </div>
+        </motion.div>
       </motion.div>
 
       {/* ================= LIGHT SECTION (Products + How it works + Stats merged) ================= */}
@@ -187,34 +196,34 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
         <div className={`${sectionWrap} py-24 sm:py-32 lg:py-40 space-y-24 sm:space-y-32`}>
 
           {/* Products */}
-          <div>
-            <div className="max-w-2xl mb-12 sm:mb-16 space-y-3">
+          <div data-mascot="products">
+            <Reveal className="max-w-2xl mb-12 sm:mb-16 space-y-3">
               <span className={eyebrow}>Purchase</span>
               <h2 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-zinc-950 font-display">Our Products</h2>
               <p className="text-base sm:text-lg text-zinc-600">
                 Two products, done properly — no confusing tiers, no filler hosting types.
               </p>
-            </div>
+            </Reveal>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8">
-              <ProductCard icon={Bot} title="Bot Hosting" price={minBotPrice} features={botFeatures} cta="Learn More" page="bot" />
-              <ProductCard icon={Server} title="VPS Hosting" price={minVpsPrice} features={vpsFeatures} cta="Learn More" page="vps" />
+              <Reveal className="h-full"><ProductCard icon={Bot} title="Bot Hosting" price={minBotPrice} features={botFeatures} cta="Learn More" page="bot" /></Reveal>
+              <Reveal className="h-full" delay={0.15}><ProductCard icon={Server} title="VPS Hosting" price={minVpsPrice} features={vpsFeatures} cta="Learn More" page="vps" /></Reveal>
             </div>
           </div>
 
           {/* How it works — a genuine sequence */}
-          <div className="border-t border-zinc-300 pt-20 sm:pt-28">
-            <div className="max-w-2xl mb-12 sm:mb-16 space-y-3">
+          <div data-mascot="steps" className="border-t border-zinc-300 pt-20 sm:pt-28">
+            <Reveal className="max-w-2xl mb-12 sm:mb-16 space-y-3">
               <span className={eyebrow}>How it works</span>
               <h2 className="text-3xl sm:text-5xl font-bold text-zinc-950 font-display">Live in three steps</h2>
               <p className="text-base sm:text-lg text-zinc-600">From sign-up to a running bot or server, without the back-and-forth.</p>
-            </div>
+            </Reveal>
             <ol className="grid grid-cols-1 md:grid-cols-3 gap-6 sm:gap-8">
               {[
                 { icon: UserPlus, title: 'Create a free account', text: 'Sign up in a minute and open your dashboard — no card needed to look around.' },
                 { icon: CreditCard, title: 'Pick a plan and pay', text: 'Choose Bot or VPS hosting and pay with the methods shown at checkout, like UPI, bank transfer or gift card.' },
                 { icon: Play, title: 'Deploy from your dashboard', text: 'Once payment is verified, your credentials land in the dashboard and you can go live.' }
               ].map(({ icon: Icon, title, text }, i) => (
-                <li key={title} className="rounded-3xl bg-white border border-zinc-300 p-8 sm:p-10 space-y-5">
+                <Reveal as="li" delay={i * 0.14} key={title} className="rounded-3xl bg-white border border-zinc-300 p-8 sm:p-10 space-y-5">
                   <div className="flex items-center justify-between">
                     <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-zinc-950 text-white">
                       <Icon className="h-7 w-7" />
@@ -223,31 +232,31 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
                   </div>
                   <h3 className="text-xl sm:text-2xl font-bold text-zinc-950 font-display">{title}</h3>
                   <p className="text-sm sm:text-base text-zinc-600 leading-relaxed">{text}</p>
-                </li>
+                </Reveal>
               ))}
             </ol>
           </div>
 
           {/* Stats */}
-          <div className="border-t border-zinc-300 pt-20 sm:pt-28 text-center">
-            <h2 className="text-3xl sm:text-5xl font-bold text-zinc-950 font-display">
+          <div data-mascot="stats" className="border-t border-zinc-300 pt-20 sm:pt-28 text-center">
+            <Reveal><h2 className="text-3xl sm:text-5xl font-bold text-zinc-950 font-display">
               Built for developers and server owners
             </h2>
             <p className="text-base sm:text-lg text-zinc-600 mt-4 max-w-2xl mx-auto">
               Straightforward hosting, transparent pricing, and a team that actually answers tickets.
-            </p>
+            </p></Reveal>
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 sm:gap-10 mt-14">
               {[
                 { icon: Gauge, value: '99.99%', label: 'Uptime SLA' },
                 { icon: Headphones, value: '24/7', label: 'Process watchdog' },
                 { icon: Bot, value: '2', label: 'Focused products' },
                 { icon: Users, value: 'Human', label: 'Support, not bots' }
-              ].map(({ icon: Icon, value, label }) => (
-                <div key={label} className="p-4">
+              ].map(({ icon: Icon, value, label }, i) => (
+                <Reveal key={label} delay={i * 0.1} className="p-4">
                   <Icon className="h-7 w-7 text-zinc-950 mx-auto mb-4" />
                   <div className="text-4xl sm:text-6xl font-bold text-zinc-950 font-display tracking-tight">{value}</div>
                   <div className="text-sm sm:text-base text-zinc-600 mt-2">{label}</div>
-                </div>
+                </Reveal>
               ))}
             </div>
           </div>
@@ -259,7 +268,7 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
         <div className={`${sectionWrap} py-24 sm:py-32 lg:py-40 space-y-24 sm:space-y-32`}>
 
           {/* Infrastructure */}
-          <div className="text-center">
+          <div data-mascot="infra" className="text-center">
             <span className={eyebrow}>Infrastructure</span>
             <h2 className={`text-4xl sm:text-5xl lg:text-6xl font-bold font-display mt-3 leading-tight ${animate ? 'mono-heading-shimmer' : 'text-white'}`}>
               Built for Uptime
@@ -275,17 +284,17 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
                 { icon: Lock, label: 'Full root access' },
                 { icon: Terminal, label: 'Multi-runtime bots' },
                 { icon: Headphones, label: 'Real human support' }
-              ].map(({ icon: Icon, label }) => (
-                <div key={label} className="p-8 sm:p-10 rounded-3xl bg-zinc-900/60 border border-zinc-800 flex flex-col items-center gap-4 text-center hover:border-zinc-600 transition-colors">
+              ].map(({ icon: Icon, label }, i) => (
+                <Reveal key={label} delay={(i % 3) * 0.1} className="rounded-3xl"><div className="h-full p-8 sm:p-10 rounded-3xl bg-zinc-900/60 border border-zinc-800 flex flex-col items-center gap-4 text-center hover:border-zinc-600 transition-colors">
                   <Icon className="h-8 w-8 text-white" />
                   <span className="text-base sm:text-lg font-semibold text-zinc-200 leading-snug">{label}</span>
-                </div>
+                </div></Reveal>
               ))}
             </div>
           </div>
 
           {/* Runtimes */}
-          <div className="border-t border-zinc-800 pt-20 sm:pt-28 grid lg:grid-cols-[1fr_1.3fr] gap-12 lg:gap-20 items-center">
+          <div data-mascot="runtimes" className="border-t border-zinc-800 pt-20 sm:pt-28 grid lg:grid-cols-[1fr_1.3fr] gap-12 lg:gap-20 items-center">
             <div className="space-y-4">
               <span className={eyebrow}>Runtimes</span>
               <h2 className="text-3xl sm:text-5xl font-bold text-white font-display">Run what you already build</h2>
@@ -314,7 +323,7 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
           </div>
 
           {/* FAQ */}
-          <div className="border-t border-zinc-800 pt-20 sm:pt-28">
+          <div data-mascot="faq" className="border-t border-zinc-800 pt-20 sm:pt-28">
             <div className="mx-auto max-w-3xl">
               <div className="text-center mb-12 space-y-3">
                 <span className={eyebrow}>Support</span>
@@ -346,7 +355,7 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
           </div>
 
           {/* Final CTA */}
-          <div className="rounded-[2rem] bg-white p-10 sm:p-16 lg:p-20 text-center space-y-6 shadow-2xl">
+          <div data-mascot="cta" className="rounded-[2rem] bg-white p-10 sm:p-16 lg:p-20 text-center space-y-6 shadow-2xl">
             <h2 className="text-3xl sm:text-5xl lg:text-6xl font-bold text-zinc-950 font-display">Ready to launch?</h2>
             <p className="text-zinc-600 text-base sm:text-lg max-w-xl mx-auto leading-relaxed">
               Create a free account and deploy your first bot or server in minutes. Free migration assistance available.
@@ -379,6 +388,12 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
         </div>
       </motion.section>
 
+      {animate && (
+        <>
+          <ScrollProgress />
+          <Mascot />
+        </>
+      )}
     </motion.div>
   );
 };
