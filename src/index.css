@@ -519,3 +519,19 @@
 @keyframes bot-flame { to { transform: scaleY(1.5); } }
 
 @media (prefers-reduced-motion: reduce) { .mascot * { animation: none !important; } }
+
+/* ============================================================================
+   MonoBot v2 — glossy art, eye tracking, jetpack that reacts to scroll speed
+   ========================================================================== */
+.mascot__aura { position: absolute; left: -12%; top: 10%; width: 124%; aspect-ratio: 1; border-radius: 50%; background: radial-gradient(circle, rgba(96, 165, 250, 0.3), transparent 66%); filter: blur(8px); animation: bot-aura 3.2s ease-in-out infinite; }
+.mascot__aura[data-act='rocket'] { background: radial-gradient(circle, rgba(249, 115, 22, 0.3), transparent 66%); }
+.mascot__aura[data-act='chart'], .mascot__aura[data-act='shop'] { background: radial-gradient(circle, rgba(74, 222, 128, 0.26), transparent 66%); }
+@keyframes bot-aura { 50% { transform: scale(1.12); opacity: 0.7; } }
+.bot .eye { transform-box: fill-box; transform-origin: center; animation: bot-blink2 4.6s infinite; translate: calc(var(--ex, 0) * 1px) calc(var(--ey, 0) * 1px); transition: translate 0.12s linear; }
+@keyframes bot-blink2 { 0%, 94%, 100% { scale: 1; } 97% { scale: 1 0.08; } }
+.bot[data-act='lie'] .eye { animation: none; scale: 1 0.18; transform: none; }
+.bot .jetf { transform-box: fill-box; transform-origin: top; opacity: min(1, calc(var(--th, 0) * 1.7)); scale: 1 calc(0.3 + var(--th, 0) * 1.1); animation: bot-flick 0.09s infinite alternate; }
+@keyframes bot-flick { to { transform: scaleX(0.8); } }
+.bot .leg-l, .bot .leg-r { transition: transform 0.4s cubic-bezier(0.3, 1.5, 0.5, 1); }
+.bot[data-fly='true'] .leg-l { transform: rotate(22deg); } .bot[data-fly='true'] .leg-r { transform: rotate(-8deg); }
+.bot[data-fly='true'] .arm-r { transform: rotate(-115deg); } .bot[data-fly='true'] .arm-l { transform: rotate(28deg); }
