@@ -27,12 +27,8 @@ setInterval(() => {
  * Extracts normalized client IP respecting proxy trust
  */
 export function getClientIp(req: Request): string {
-  const forwarded = req.headers['x-forwarded-for'];
-  if (forwarded) {
-    const raw = Array.isArray(forwarded) ? forwarded[0] : forwarded;
-    const ip = raw.split(',')[0].trim();
-    if (ip) return ip;
-  }
+  // req.ip honours Express' `trust proxy` setting (TRUST_PROXY env). Reading X-Forwarded-For directly let any
+  // client spoof its address and bypass every IP rate limit / ban.
   return req.ip || req.socket.remoteAddress || '127.0.0.1';
 }
 
