@@ -2,10 +2,12 @@ import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
-import { getDb, saveDbSync } from './db';
+import { getDb, saveDbSync, saveDb } from './db';
+import { resolveJwtSecret } from './hosting/crypto';
 import { User, UserRole, AuditLog } from '../src/types';
 
-export const JWT_SECRET = process.env.JWT_SECRET || 'mononode_secret_jwt_key_2026_super_safe';
+// Never fall back to a hard-coded secret: a weak/placeholder env value is replaced by a generated, persisted one.
+export const JWT_SECRET = resolveJwtSecret();
 
 export interface AuthenticatedRequest extends Request {
   user?: User;
@@ -140,7 +142,7 @@ export async function authMiddleware(req: AuthenticatedRequest, res: Response, n
     });
     if (db.apiAuditLogs.length > 1000) db.apiAuditLogs = db.apiAuditLogs.slice(0, 1000);
     
-    saveDbSync();
+    void saveDb(); // debounced; a synchronous full-db write per API call was a cheap DoS
     
     req.user = user;
     (req as any).apiKey = apiKey;
@@ -170,6 +172,13 @@ export async function authMiddleware(req: AuthenticatedRequest, res: Response, n
   next();
 }
 
+
+/** Best-effort identification (for ad targeting etc.). Never rejects the request. */
+export async function optionalUser(req: Request): Promise<User | null> {
+  const token = req.headers.authorization?.replace('Bearer ', '') || (req as any).cookies?.aether_token;
+  if (!token || token.startsWith('aep_') || token.startsWith('aeth_')) return null;
+  return verifyToken(token);
+}
 
 export const authenticateUser = authMiddleware;
 

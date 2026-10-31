@@ -1,4 +1,5 @@
 import fs from 'fs';
+import crypto from 'crypto';
 import path from 'path';
 import bcrypt from 'bcryptjs';
 import { getInstallationId } from './installation';
@@ -11,6 +12,11 @@ import {
   StatusComponent, Incident, ScheduledMaintenance,
   ProvisionRecord, PanelIntegrationSettings, QuickLink
 } from '../src/types';
+import {
+  HostNode, HostImage, HostServer, HostBackup, HostingPlan, StoreItem, Entitlement, CoinTx, EarnSession, MediaItem
+} from '../src/hostingTypes';
+import { defaultPlans as defaultHostingPlans, defaultHostingSettings } from './hosting/plans';
+import { defaultImages, defaultStoreItems } from './hosting/seed';
 
 const DATA_DIR = path.join(process.cwd(), 'data');
 const DB_FILE = path.join(DATA_DIR, 'db.json');
@@ -40,6 +46,18 @@ export interface DatabaseSchema {
   incidents: Incident[];
   scheduledMaintenances: ScheduledMaintenance[];
   provisions: ProvisionRecord[];
+  // --- native hosting panel (merged AirLink panel + daemon) ---
+  nodes: HostNode[];
+  images: HostImage[];
+  servers: HostServer[];
+  backups: HostBackup[];
+  hostingPlans: HostingPlan[];
+  storeItems: StoreItem[];
+  entitlements: Entitlement[];
+  coinTx: CoinTx[];
+  earnSessions: EarnSession[];
+  media: MediaItem[];
+  processedWebhooks: string[]; // Stripe event ids already applied (idempotency)
 }
 
 const defaultProducts: Product[] = [
@@ -327,7 +345,7 @@ function defaultDb(): DatabaseSchema {
     announcements: [],
     mail: [],
     auditLogs: [],
-    settings: defaultSettings,
+    settings: { ...cloneDefaults(defaultSettings), hosting: defaultHostingSettings() },
     ads: [],
     adEvents: [],
     discordLinks: {},
@@ -339,7 +357,18 @@ function defaultDb(): DatabaseSchema {
     statusComponents: defaultStatusComponents,
     incidents: [],
     scheduledMaintenances: [],
-    provisions: []
+    provisions: [],
+    nodes: [],
+    images: defaultImages(),
+    servers: [],
+    backups: [],
+    hostingPlans: defaultHostingPlans(new Date().toISOString()),
+    storeItems: defaultStoreItems(),
+    entitlements: [],
+    coinTx: [],
+    earnSessions: [],
+    media: [],
+    processedWebhooks: []
   };
 }
 
@@ -359,7 +388,10 @@ export async function getDb(reload = false): Promise<DatabaseSchema> {
       }
 
       const adminEmail = process.env.AETHER_ADMIN_EMAIL || 'admin@yourdomain.com';
-      const adminPassword = process.env.AETHER_ADMIN_PASSWORD || 'adminopp';
+      // No hard-coded fallback password: if none is configured we generate one and print it ONCE.
+      const envPw = process.env.AETHER_ADMIN_PASSWORD;
+      const generatedPw = !envPw || envPw === 'change_me_secure_admin_password' ? crypto.randomBytes(12).toString('base64url') : '';
+      const adminPassword = generatedPw || envPw!;
 
       if (fs.existsSync(DB_FILE)) {
         try {
@@ -439,6 +471,19 @@ export async function getDb(reload = false): Promise<DatabaseSchema> {
         } else if (!dbCache.settings.paymentGateways.giftCard) {
           dbCache.settings.paymentGateways.giftCard = defaultSettings.paymentGateways!.giftCard;
         }
+        // Hosting collections: seeded only when the field is MISSING (an empty list means the admin deleted them).
+        if (!Array.isArray(dbCache.nodes)) dbCache.nodes = [];
+        if (!Array.isArray(dbCache.images)) dbCache.images = defaultImages();
+        if (!Array.isArray(dbCache.servers)) dbCache.servers = [];
+        if (!Array.isArray(dbCache.backups)) dbCache.backups = [];
+        if (!Array.isArray(dbCache.hostingPlans)) dbCache.hostingPlans = defaultHostingPlans(new Date().toISOString());
+        if (!Array.isArray(dbCache.storeItems)) dbCache.storeItems = defaultStoreItems();
+        if (!Array.isArray(dbCache.entitlements)) dbCache.entitlements = [];
+        if (!Array.isArray(dbCache.coinTx)) dbCache.coinTx = [];
+        if (!Array.isArray(dbCache.earnSessions)) dbCache.earnSessions = [];
+        if (!Array.isArray(dbCache.media)) dbCache.media = [];
+        if (!Array.isArray(dbCache.processedWebhooks)) dbCache.processedWebhooks = [];
+        dbCache.settings.hosting = { ...defaultHostingSettings(), ...(dbCache.settings.hosting || {}) };
         if (!dbCache.installationId) dbCache.installationId = getInstallationId();
       } else {
         dbCache = defaultDb();
@@ -465,6 +510,7 @@ export async function getDb(reload = false): Promise<DatabaseSchema> {
         dbCache.users.push(adminUser);
         dbCache.passwords[adminUser.id] = passwordHash;
         console.log(`[Database/INFO] Created default super admin account: ${adminEmail}`);
+        if (generatedPw) console.log(`[Database/INFO] Generated admin password (shown once, change it after first login): ${generatedPw}`);
       }
 
       saveDbSync();
@@ -488,7 +534,10 @@ export function saveDbSync(): void {
       if (!fs.existsSync(DATA_DIR)) {
         fs.mkdirSync(DATA_DIR, { recursive: true });
       }
-      fs.writeFileSync(DB_FILE, JSON.stringify(dbCache, null, 2), 'utf-8');
+      // Atomic: write a temp file then rename, so a crash mid-write can never leave a truncated db.json.
+      const tmp = `${DB_FILE}.${process.pid}.tmp`;
+      fs.writeFileSync(tmp, JSON.stringify(dbCache), { encoding: 'utf-8', mode: 0o600 });
+      fs.renameSync(tmp, DB_FILE);
     } catch (err) {
       console.error('[Database/ERROR] Failed to persist database to disk:', err);
     }
