@@ -2,6 +2,8 @@
  * MonoNode - Global Type Definitions
  */
 
+import type { HostingSettings } from './hostingTypes';
+
 export type UserRole = 'user' | 'support' | 'moderator' | 'admin' | 'super_admin';
 
 export interface User {
@@ -28,6 +30,14 @@ export interface User {
   adminGrantedAllocations?: number; // Extra allocations granted by admin (default: 0)
   serverLimit?: number; // Effective limit for backward compatibility
   credits: number;
+  // --- native hosting panel ---
+  coins?: number;                          // economy currency earned from ads/blogs, spent in the store
+  hostingPlanId?: string;                  // paid hosting plan (undefined = free plan)
+  planExpiresAt?: string;                  // when the paid plan lapses (falls back to the free plan)
+  tempPlan?: { planId: string; until: string }; // temporary premium bought in the store
+  extraSlots?: number;                     // server slots bought in the store
+  hostingOverrides?: { serverLimit?: number; ramMB?: number; cpuPercent?: number; diskMB?: number }; // admin per-account overrides
+  lastDailyBonusAt?: string;
   // External game-server panel link (e.g. Pterodactyl/Pelican Application API)
   panelUserId?: number;
   panelUsername?: string;
@@ -588,6 +598,11 @@ export interface Order {
   planName: string;
   productId?: string;
   billingCycle: 'monthly' | 'yearly';
+  /** Set for native hosting plan purchases (id of a BillingPeriod, e.g. 'halfyearly'). */
+  kind?: 'hosting_plan' | 'credit_deposit' | 'legacy';
+  hostingPlanId?: string;
+  hostingPeriodId?: string;
+  stripeSessionId?: string;
   amount: number;
   currency: string;
   status: 'paid' | 'pending' | 'failed' | 'refunded';
@@ -765,6 +780,14 @@ export interface PaymentGatewaySettings {
   stripe: {
     enabled: boolean;
     instructions: string;
+    publishableKey?: string;
+    /** Stored AES-GCM encrypted; the API only ever returns a masked value. */
+    secretKey?: string;
+    webhookSecret?: string;
+    currency?: string;       // ISO code, e.g. usd, eur, inr
+    mode?: 'test' | 'live';
+    lastTestedAt?: string;
+    lastTestOk?: boolean;
   };
   // Manual gift card redemption — customer submits a code, staff verifies it
   // and approves the deposit (same approval queue as UPI/Bank). Amazon and
@@ -922,6 +945,7 @@ export interface SystemSettings {
   footerDescription?: string;
   panelIntegration?: PanelIntegrationSettings;
   quickLinks?: QuickLink[];
+  hosting?: HostingSettings;
 }
 
 // Admin-managed external links (e.g. "Discord Bot Panel", "VPS Panel", "Status Page").
@@ -969,8 +993,8 @@ export interface HealthStatus {
 }
 
 // Ads System Types
-export type AdPlacement = 'dashboard' | 'billing' | 'public' | 'login';
-export type AdType = 'banner' | 'card' | 'announcement' | 'sponsored';
+export type AdPlacement = 'overview' | 'servers' | 'create' | 'upgrade' | 'store' | 'console' | 'billing' | 'public' | 'login' | 'footer' | 'popup' | 'reward' | 'dashboard';
+export type AdType = 'banner' | 'card' | 'announcement' | 'sponsored' | 'image' | 'popup';
 
 export interface AdItem {
   id: string;
@@ -982,6 +1006,12 @@ export interface AdItem {
   placement: AdPlacement;
   priority: number;
   frequencyCapPerSession: number;
+  /** Extra campaign controls (Ad Center). */
+  ctaLabel?: string;
+  badge?: string;
+  showToPremium?: boolean;     // default false: paying users are ad-free
+  maxImpressions?: number;     // 0/undefined = unlimited
+  maxClicks?: number;
   startDate?: string;
   endDate?: string;
   isActive: boolean;

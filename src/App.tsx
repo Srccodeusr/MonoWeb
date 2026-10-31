@@ -11,11 +11,10 @@ import { parseUrlToRoute, routeToUrl } from './lib/routing';
 
 // Components
 import { Navbar } from './components/Navbar';
-import { Sidebar } from './components/Sidebar';
+import { PanelLayout } from './components/panel/PanelLayout';
 import { AdminSidebar } from './components/AdminSidebar';
 import { Footer } from './components/Footer';
 import { CustomCursor } from './components/CustomCursor';
-import { AdBanner } from './components/AdBanner';
 import { GlobalSearchModal } from './components/GlobalSearchModal';
 
 // Public Pages
@@ -33,7 +32,12 @@ import { Login } from './pages/auth/Login';
 import { Register } from './pages/auth/Register';
 
 // Customer Pages
-import { Dashboard } from './pages/customer/Dashboard';
+import { ServersOverview } from './pages/panel/ServersOverview';
+import { CreateServer } from './pages/panel/CreateServer';
+import { ServerDetail } from './pages/panel/ServerDetail';
+import { Upgrade } from './pages/panel/Upgrade';
+import { Store } from './pages/panel/Store';
+import { Earn } from './pages/panel/Earn';
 import { Billing } from './pages/customer/Billing';
 import { Checkout } from './pages/customer/Checkout';
 import { SupportTickets } from './pages/customer/SupportTickets';
@@ -58,7 +62,20 @@ import { AdminAppearance } from './pages/admin/AdminAppearance';
 import { AdminDiscord } from './pages/admin/AdminDiscord';
 import { AdminLegal } from './pages/admin/AdminLegal';
 import { PanelLinkSettings } from './pages/admin/PanelLinkSettings';
+import { AdminHosting } from './pages/admin/AdminHosting';
+import { AdminNodes } from './pages/admin/AdminNodes';
+import { AdminServers } from './pages/admin/AdminServers';
+import { AdminAccounts } from './pages/admin/AdminAccounts';
+import { AdminImages } from './pages/admin/AdminImages';
+import { AdminHostingPlans } from './pages/admin/AdminHostingPlans';
+import { AdminStore } from './pages/admin/AdminStore';
+import { AdminHostingSettings } from './pages/admin/AdminHostingSettings';
+import { AdminStripe } from './pages/admin/AdminStripe';
 
+
+/** Customer pages share one panel shell (tab strip, announcement bar, payment watcher). It stays mounted between pages. */
+const CustomerShell: React.FC<{ enabled: boolean; currentPage: string; onNavigate: (p: string, params?: any) => void; children: React.ReactNode }> = ({ enabled, currentPage, onNavigate, children }) =>
+  enabled ? <PanelLayout currentPage={currentPage} onNavigate={onNavigate}>{children}</PanelLayout> : <>{children}</>;
 
 function AppContent() {
   const { user, loading, logout } = useAuth();
@@ -112,6 +129,7 @@ function AppContent() {
 
   // Programmatic navigation updating browser history
   const handleNavigate = useCallback((page: string, params?: any, options?: { replace?: boolean }) => {
+    if (page === 'dashboard') page = 'servers'; // the old dashboard is gone: the server overview is the home of the panel
     const targetUrl = routeToUrl(page, params);
 
     if (options?.replace) {
@@ -142,7 +160,7 @@ function AppContent() {
       setPageParams({ redirect: fullPath });
     } else if (user && (currentPage === 'login' || currentPage === 'register')) {
       // Authenticated user visits auth page -> return to requested path or dashboard
-      const redirectUrl = pageParams?.redirect || '/dashboard';
+      const redirectUrl = pageParams?.redirect || '/servers';
       window.history.replaceState({}, '', redirectUrl);
       const restored = parseUrlToRoute(redirectUrl, '');
       setCurrentPage(restored.page);
@@ -251,21 +269,6 @@ function AppContent() {
       {/* Main Body Layout */}
       <div className="flex-1 flex flex-col lg:flex-row">
 
-        {/* Customer Sidebar */}
-        {isCustomerPage && user && (
-          <motion.div
-            initial={motionEnabled && settings.initialPanelAnimation && isInitialPanelMount ? { opacity: 0, x: -20 } : { opacity: 1, x: 0 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: settings.intensity === 'subtle' ? 0.2 : settings.intensity === 'enhanced' ? 0.45 : 0.3, ease: 'easeOut' }}
-            className="shrink-0"
-          >
-            <Sidebar
-              currentPage={currentPage}
-              onNavigate={handleNavigate}
-            />
-          </motion.div>
-        )}
-
         {/* Admin Sidebar */}
         {isAdminPage && user && (
           <motion.div
@@ -284,6 +287,7 @@ function AppContent() {
         {/* Content Viewport */}
         <main className="flex-1 overflow-x-hidden min-h-[calc(100vh-4rem)] flex flex-col justify-between p-4 lg:p-6">
           <div className="flex-1 flex flex-col">
+            <CustomerShell enabled={isCustomerPage && !!user} currentPage={currentPage} onNavigate={handleNavigate}>
             <PageTransition routeKey={currentPage}>
               <div className="flex-1 flex flex-col">
                 {/* Public Views */}
@@ -304,12 +308,12 @@ function AppContent() {
                 {currentPage === 'register' && <Register onNavigate={handleNavigate} />}
 
                 {/* Customer Account Views */}
-                {currentPage === 'dashboard' && (
-                  <div className="space-y-6">
-                    <AdBanner placement="dashboard" />
-                    <Dashboard onNavigate={handleNavigate} />
-                  </div>
-                )}
+                {currentPage === 'servers' && <ServersOverview onNavigate={handleNavigate} />}
+                {currentPage === 'server-create' && <CreateServer onNavigate={handleNavigate} />}
+                {currentPage === 'server' && <ServerDetail key={pageParams?.id} id={String(pageParams?.id || '')} onNavigate={handleNavigate} />}
+                {currentPage === 'upgrade' && <Upgrade onNavigate={handleNavigate} />}
+                {currentPage === 'store' && <Store onNavigate={handleNavigate} />}
+                {currentPage === 'earn' && <Earn onNavigate={handleNavigate} />}
                 {currentPage === 'billing' && <Billing onNavigate={handleNavigate} />}
                 {currentPage === 'checkout' && <Checkout onNavigate={handleNavigate} params={pageParams} />}
                 {currentPage === 'support' && <SupportTickets onNavigate={handleNavigate} />}
@@ -330,12 +334,22 @@ function AppContent() {
                 {currentPage === 'admin-api-keys' && <AdminApiKeys onNavigate={handleNavigate} />}
                 {currentPage === 'admin-legal' && <AdminLegal />}
                 {currentPage === 'admin-settings' && <AdminSettings />}
-                {currentPage === 'admin-ads' && <AdminAds />}
+                {currentPage === 'admin-ads' && <AdminAds onNavigate={handleNavigate} />}
+                {currentPage === 'admin-hosting' && <AdminHosting onNavigate={handleNavigate} />}
+                {currentPage === 'admin-nodes' && <AdminNodes />}
+                {currentPage === 'admin-servers' && <AdminServers />}
+                {currentPage === 'admin-accounts' && <AdminAccounts />}
+                {currentPage === 'admin-images' && <AdminImages />}
+                {currentPage === 'admin-hosting-plans' && <AdminHostingPlans />}
+                {currentPage === 'admin-store' && <AdminStore />}
+                {currentPage === 'admin-hosting-settings' && <AdminHostingSettings />}
+                {currentPage === 'admin-stripe' && <AdminStripe />}
                 {currentPage === 'admin-discord' && <AdminDiscord />}
                 {currentPage === 'admin-appearance' && <AdminAppearance />}
                 {currentPage === 'admin-panel-link' && <PanelLinkSettings />}
               </div>
             </PageTransition>
+            </CustomerShell>
           </div>
 
           {/* Subtle Panel Footer for Customer & Admin Pages */}

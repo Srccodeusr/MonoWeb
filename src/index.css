@@ -474,3 +474,7 @@ html.is-scrolling .mono-heading-shimmer { animation-play-state: paused; }
 @media (prefers-reduced-motion: reduce) {
   .fx-reveal { opacity: 1; transform: none; transition: none; will-change: auto; }
 }
+
+/* Utility used by the hosting panel tab strip */
+.no-scrollbar { scrollbar-width: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
