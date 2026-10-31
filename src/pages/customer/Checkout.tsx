@@ -269,10 +269,10 @@ export const Checkout: React.FC<CheckoutProps> = ({ onNavigate, params }) => {
               <MailIcon className="h-3.5 w-3.5" /> Open Mail
             </button>
             <button
-              onClick={() => onNavigate('dashboard')}
+              onClick={() => onNavigate('servers')}
               className="py-2.5 rounded-xl font-semibold text-xs text-zinc-300 bg-zinc-950 border border-zinc-800 hover:text-white hover:border-zinc-700"
             >
-              Go to Dashboard
+              View my servers
             </button>
           </div>
         </div>
@@ -404,10 +404,10 @@ export const Checkout: React.FC<CheckoutProps> = ({ onNavigate, params }) => {
           )}
 
           <button
-            onClick={() => onNavigate('dashboard')}
+            onClick={() => onNavigate('servers')}
             className="w-full py-2.5 rounded-xl font-semibold text-xs text-zinc-300 bg-zinc-950 border border-zinc-800 hover:text-white hover:border-zinc-700"
           >
-            Go to Dashboard
+            View my servers
           </button>
         </div>
       </div>
