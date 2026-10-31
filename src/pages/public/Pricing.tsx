@@ -6,6 +6,7 @@ import {
 import { useTheme } from '../../lib/ThemeContext';
 import { apiRequest } from '../../lib/api';
 import { Plan, Product } from '../../types';
+import { HostingPlansSection } from '../../components/HostingPlansSection';
 
 interface PricingProps {
   onNavigate: (page: string, params?: any) => void;
@@ -105,6 +106,9 @@ export const Pricing: React.FC<PricingProps> = ({ onNavigate }) => {
 
   return (
     <div className="space-y-12 py-8 mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+      {/* Native hosting plans (monthly / half-yearly / yearly, set by the admin) */}
+      <HostingPlansSection onNavigate={onNavigate} />
+
       {/* Header */}
       <div className="text-center max-w-3xl mx-auto space-y-4">
         <h1 className="text-4xl font-extrabold text-white">Transparent, Scalable Pricing</h1>
