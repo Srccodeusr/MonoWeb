@@ -15,6 +15,11 @@ import adsRoutes from './server/routes/ads';
 import discordRoutes from './server/routes/discord';
 import statusRoutes from './server/routes/status';
 import apiKeysRoutes from './server/routes/apiKeys';
+import hostingRoutes from './server/routes/hosting';
+import hostingAdminRoutes, { serveMedia } from './server/routes/hostingAdmin';
+import hostingBillingRoutes, { publicRouter as hostingPublicRoutes, stripeWebhook } from './server/routes/hostingBilling';
+import economyRoutes from './server/routes/economy';
+import { startHostingScheduler } from './server/hosting/serverService';
 import { generalApiRateLimiter, sensitiveAuthRateLimiter, safePayloadErrorHandler } from './server/services/requestProtection';
 
 dotenv.config();
@@ -23,10 +28,32 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
-  // Enable reverse proxy trust (Cloud Run, Nginx, Cloudflare, Caddy)
-  if (process.env.TRUST_PROXY !== 'false' && process.env.TRUST_PROXY !== '0') {
-    app.set('trust proxy', true);
+  // Reverse proxy trust. `true` (the old default) lets ANY client spoof its IP through X-Forwarded-For and
+  // bypass every rate limit/ban. Default is now ONE proxy hop in production (Nginx/Caddy/Cloudflare tunnel),
+  // none in development. Override with TRUST_PROXY=<hops|false|loopback|CIDR list>.
+  {
+    const tp = (process.env.TRUST_PROXY ?? '').trim();
+    if (tp === 'false' || tp === '0') app.set('trust proxy', false);
+    else if (tp === 'true') app.set('trust proxy', 1);
+    else if (/^\d+$/.test(tp)) app.set('trust proxy', parseInt(tp, 10));
+    else if (tp) app.set('trust proxy', tp);
+    else app.set('trust proxy', process.env.NODE_ENV === 'production' ? 1 : false);
   }
+  app.disable('x-powered-by');
+
+  // Security headers (no extra dependency).
+  app.use((req, res, next) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+    res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+    res.setHeader('Content-Security-Policy', "frame-ancestors 'self'; base-uri 'self'; object-src 'none'; form-action 'self' https://checkout.stripe.com");
+    if (req.secure) res.setHeader('Strict-Transport-Security', 'max-age=15552000; includeSubDomains');
+    next();
+  });
+
+  // Stripe needs the RAW body to verify its signature, so this MUST come before express.json().
+  app.post('/api/v1/stripe/webhook', express.raw({ type: '*/*', limit: '1mb' }), stripeWebhook);
 
   // Basic Body Parsers with error interception
   app.use(express.json({ limit: '10mb' }));
@@ -36,16 +63,32 @@ async function startServer() {
   // General API Request Protection
   app.use('/api', generalApiRateLimiter);
 
-  // Helper Cookie Parser
+  // Helper Cookie Parser (null-prototype object; malformed escapes no longer throw on every request)
   app.use((req, res, next) => {
-    req.cookies = {};
+    req.cookies = Object.create(null);
     const rc = req.headers.cookie;
     if (rc) {
       rc.split(';').forEach(cookie => {
         const parts = cookie.split('=');
-        req.cookies[parts.shift()!.trim()] = decodeURI(parts.join('='));
+        const key = parts.shift()!.trim();
+        if (!key || key === '__proto__') return;
+        const raw = parts.join('=');
+        try { req.cookies[key] = decodeURIComponent(raw); } catch { req.cookies[key] = raw; }
       });
     }
+    next();
+  });
+
+  // CSRF defence for cookie-authenticated writes: when a state-changing request carries the session cookie but no
+  // Authorization/API-key header (i.e. the browser attached it automatically), its Origin must be ours.
+  app.use('/api', (req, res, next) => {
+    if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next();
+    if (!req.cookies?.aether_token || req.headers.authorization || req.headers['x-api-key']) return next();
+    const origin = req.headers.origin as string | undefined;
+    const host = req.headers.host;
+    let ok = false;
+    if (origin) { try { const o = new URL(origin); ok = o.host === host || (process.env.APP_URL ? o.origin === new URL(process.env.APP_URL).origin : false); } catch { ok = false; } }
+    if (!ok) return res.status(403).json({ success: false, error: { code: 'CSRF_BLOCKED', message: 'Cross-site request blocked.' } });
     next();
   });
 
@@ -63,7 +106,8 @@ async function startServer() {
       ...allowedEnv
     ]);
 
-    if (origin && (allowedSet.has(origin) || allowedSet.has('*') || process.env.NODE_ENV !== 'production')) {
+    // Only explicitly allowed origins get credentialed CORS (previously every origin did unless NODE_ENV=production).
+    if (origin && (allowedSet.has(origin) || allowedSet.has('*'))) {
       res.setHeader('Access-Control-Allow-Origin', origin);
       res.setHeader('Access-Control-Allow-Credentials', 'true');
       res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
@@ -111,6 +155,12 @@ async function startServer() {
   app.use('/api/v1/billing', billingRoutes);
   app.use('/api/v1/support', supportRoutes);
   app.use('/api/v1/mail', mailRoutes);
+  app.get('/api/v1/media/:id', serveMedia);
+  app.use('/api/v1/hosting-public', hostingPublicRoutes);
+  app.use('/api/v1/hosting/billing', hostingBillingRoutes);
+  app.use('/api/v1/hosting', hostingRoutes);
+  app.use('/api/v1/economy', economyRoutes);
+  app.use('/api/v1/admin/hosting', hostingAdminRoutes);
   app.use('/api/v1/admin', adminRoutes);
   app.use('/api/v1/ads', adsRoutes);
   app.use('/api/v1/discord', discordRoutes);
@@ -199,6 +249,7 @@ async function startServer() {
   // Bind and Listen on Port 3000
   const server = app.listen(PORT, '0.0.0.0', () => {
     console.log(`[Platform] Server running on http://0.0.0.0:${PORT}`);
+    startHostingScheduler();
   });
 
   server.on('error', (err: any) => {
