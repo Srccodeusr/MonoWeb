@@ -1,4 +1,4 @@
-import { Router, Response } from 'express';
+import { Router, Response, NextFunction } from 'express';
 import bcrypt from 'bcryptjs';
 import { getDb, saveDbSync } from '../db';
 import { authMiddleware, requireRole, AuthenticatedRequest, createAuditLog } from '../auth';
@@ -7,6 +7,7 @@ import { getDiscordOAuthRedirectUri } from '../oauthUrlResolver';
 import { testIpRiskConnection } from '../utils/ipRiskProvider';
 import { getEgg, testPanelConnection, PanelApiError } from '../services/panelService';
 import { createProvisionRecord, runProvisioning } from '../services/provisioningService';
+import { fulfillHostingOrder } from '../hosting/billing';
 
 const router = Router();
 
@@ -45,6 +46,24 @@ function queueCustomerMail(
 // Require admin or support role for all routes in this router
 router.use(authMiddleware);
 router.use(requireRole(['admin', 'super_admin', 'support', 'moderator']));
+
+// SECURITY: this router used to give support/moderator accounts EVERYTHING below (role changes, settings,
+// payment secrets, credits...), so any support account could promote itself to super_admin. Staff roles are now
+// limited to read-only overview data and the support desk; every other route needs admin/super_admin.
+router.use((req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  if (['admin', 'super_admin'].includes(req.user!.role)) return next();
+  const readOnly = req.method === 'GET' && /^\/(stats|users|orders|audit-logs|announcements)(\/|$)/.test(req.path);
+  if (readOnly || /^\/support\//.test(req.path)) return next();
+  return res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Insufficient permissions for this action.' } });
+});
+
+/** Only a super_admin may grant or modify admin-level roles, and nobody may change their own role. */
+function roleChangeAllowed(actor: any, target: any, newRole: string): string | null {
+  if (actor.id === target.id) return 'You cannot change your own role.';
+  const high = ['admin', 'super_admin'];
+  if ((high.includes(newRole) || high.includes(target.role)) && actor.role !== 'super_admin') return 'Only a super admin can grant or change admin roles.';
+  return null;
+}
 
 // GET /api/v1/admin/stats - Global business overview
 router.get('/stats', async (req: AuthenticatedRequest, res: Response) => {
@@ -95,6 +114,9 @@ router.get('/users', async (req: AuthenticatedRequest, res: Response) => {
 // POST /api/v1/admin/users - Admin Create User
 router.post('/users', async (req: AuthenticatedRequest, res: Response) => {
   const { email, username, password, role, credits, displayName } = req.body;
+  if (['admin', 'super_admin'].includes(role) && req.user!.role !== 'super_admin') {
+    return res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Only a super admin can create admin accounts.' } });
+  }
   if (!email || !username || !password) {
     return res.status(400).json({ success: false, error: { code: 'MISSING_FIELDS', message: 'Email, username, and password are required' } });
   }
@@ -145,10 +167,12 @@ router.put('/users/:id', async (req: AuthenticatedRequest, res: Response) => {
 
   const { role, isSuspended, credits, displayName } = req.body;
 
-  if (role && ['user', 'support', 'moderator', 'admin', 'super_admin'].includes(role)) {
+  if (role && ['user', 'support', 'moderator', 'admin', 'super_admin'].includes(role) && role !== user.role) {
+    const denied = roleChangeAllowed(req.user, user, role);
+    if (denied) return res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: denied } });
     user.role = role;
   }
-  if (typeof isSuspended === 'boolean') {
+  if (typeof isSuspended === 'boolean' && user.id !== req.user!.id) {
     user.isSuspended = isSuspended;
   }
   if (typeof credits === 'number') {
@@ -177,7 +201,10 @@ router.patch('/users/:id/role', async (req: AuthenticatedRequest, res: Response)
     return res.status(400).json({ success: false, error: { code: 'INVALID_ROLE', message: 'Invalid role specified' } });
   }
 
+  const denied = roleChangeAllowed(req.user, user, role);
+  if (denied) return res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: denied } });
   user.role = role;
+  user.tokenVersion = (user.tokenVersion || 1) + 1; // revoke existing sessions so the new role/permissions apply immediately
   user.updatedAt = new Date().toISOString();
   saveDbSync();
 
@@ -664,13 +691,18 @@ router.get('/audit-logs', async (req: AuthenticatedRequest, res: Response) => {
 // GET /api/v1/admin/settings
 router.get('/settings', async (req: AuthenticatedRequest, res: Response) => {
   const db = await getDb();
-  res.json({ success: true, data: db.settings });
+  // Never ship stored secrets back to the browser.
+  const safe: any = JSON.parse(JSON.stringify(db.settings));
+  if (safe.paymentGateways?.stripe) { delete safe.paymentGateways.stripe.secretKey; delete safe.paymentGateways.stripe.webhookSecret; }
+  res.json({ success: true, data: safe });
 });
 
 // PUT /api/v1/admin/settings
 router.put('/settings', async (req: AuthenticatedRequest, res: Response) => {
   const db = await getDb();
-  Object.assign(db.settings, req.body);
+  // Mass-assignment guard: these blocks have dedicated, validated endpoints (/admin/hosting/settings, /admin/hosting/stripe).
+  const { hosting: _h, paymentGateways: _pg, ...rest } = req.body || {};
+  Object.assign(db.settings, rest);
   saveDbSync();
 
   await createAuditLog(req.user!.id, req.user!.email, req.user!.role, 'ADMIN_UPDATE_SETTINGS', 'SYSTEM', 'Updated system settings');
@@ -798,18 +830,25 @@ router.put('/settings/quick-links', async (req: AuthenticatedRequest, res: Respo
 // GET /api/v1/admin/payment-settings
 router.get('/payment-settings', async (req: AuthenticatedRequest, res: Response) => {
   const db = await getDb();
-  res.json({ success: true, data: db.settings.paymentGateways });
+  const pg: any = JSON.parse(JSON.stringify(db.settings.paymentGateways || {}));
+  if (pg.stripe) { delete pg.stripe.secretKey; delete pg.stripe.webhookSecret; }
+  res.json({ success: true, data: pg });
 });
 
 // PUT /api/v1/admin/payment-settings
 router.put('/payment-settings', async (req: AuthenticatedRequest, res: Response) => {
   const db = await getDb();
-  db.settings.paymentGateways = { ...db.settings.paymentGateways, ...req.body };
+  // Stripe credentials are managed (encrypted, validated, tested) from /admin/hosting/stripe only.
+  const keepStripe = (db.settings.paymentGateways as any)?.stripe;
+  const { stripe: _ignored, ...body } = req.body || {};
+  db.settings.paymentGateways = { ...db.settings.paymentGateways, ...body, ...(keepStripe ? { stripe: keepStripe } : {}) } as any;
   saveDbSync();
 
   await createAuditLog(req.user!.id, req.user!.email, req.user!.role, 'ADMIN_UPDATE_PAYMENT_GATEWAYS', 'PAYMENTS', 'Updated payment gateways and QR code settings');
 
-  res.json({ success: true, data: db.settings.paymentGateways });
+  const pg2: any = JSON.parse(JSON.stringify(db.settings.paymentGateways || {}));
+  if (pg2.stripe) { delete pg2.stripe.secretKey; delete pg2.stripe.webhookSecret; }
+  res.json({ success: true, data: pg2 });
 });
 
 // --- ORDERS & PAYMENT APPROVALS ---
@@ -842,6 +881,12 @@ router.post('/orders/:id/approve', async (req: AuthenticatedRequest, res: Respon
     return res.status(400).json({ success: false, error: { code: 'NOT_PENDING', message: `Only pending orders can be approved — this one is already ${order.status}.` } });
   }
 
+  // Native hosting plan orders (UPI/bank/crypto/gift card): approval activates the plan and lifts the user's servers.
+  if (order.kind === 'hosting_plan') {
+    await fulfillHostingOrder(db, order);
+    await createAuditLog(req.user!.id, req.user!.email, req.user!.role, 'ADMIN_APPROVE_HOSTING_ORDER', order.id, `Approved hosting order ${order.planName} for ${order.userEmail}`);
+    return res.json({ success: true, data: order, message: 'Hosting plan activated.' });
+  }
   const targetUser = db.users.find(u => u.id === order.userId);
   // credit_deposit orders are Add-Credits top-ups (UPI/Bank/Gift Card) — approving
   // just credits the balance. Any other order is a plan bought directly with a
@@ -968,7 +1013,7 @@ router.post('/orders/:id/reject', async (req: AuthenticatedRequest, res: Respons
     }
     order.creditsHeld = false;
   }
-  if (order.couponCode) {
+  if (order.couponCode && order.kind !== 'hosting_plan') { // hosting orders only count a coupon use once they are paid
     const coupon = db.coupons.find(c => c.code === order.couponCode);
     if (coupon && coupon.timesUsed > 0) coupon.timesUsed -= 1;
   }

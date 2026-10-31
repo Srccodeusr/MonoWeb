@@ -269,7 +269,7 @@ router.post('/register', async (req, res) => {
     const token = generateToken(newUser);
     await createAuditLog(newUser.id, newUser.email, newUser.role, 'USER_REGISTER', 'ACCOUNT', 'User registered account');
 
-    res.cookie('aether_token', token, { httpOnly: true, secure: true, sameSite: 'none', maxAge: 7 * 86400000 });
+    res.cookie('aether_token', token, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax', maxAge: 7 * 86400000 });
 
     res.json({
       success: true,
@@ -371,7 +371,7 @@ router.post('/login', async (req, res) => {
     const token = generateToken(user);
     await createAuditLog(user.id, user.email, user.role, 'USER_LOGIN', 'SESSION', 'Successful user authentication');
 
-    res.cookie('aether_token', token, { httpOnly: true, secure: true, sameSite: 'none', maxAge: 7 * 86400000 });
+    res.cookie('aether_token', token, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax', maxAge: 7 * 86400000 });
 
     res.json({
       success: true,
@@ -472,7 +472,7 @@ router.post('/firebase-verify', async (req, res) => {
       const sessionToken = generateToken(user);
       await createAuditLog(user.id, user.email, user.role, 'GOOGLE_FIREBASE_VERIFY_LOGIN', 'SESSION', 'Authenticated via verified Firebase ID token');
 
-      res.cookie('aether_token', sessionToken, { httpOnly: true, secure: true, sameSite: 'none', maxAge: 7 * 86400000 });
+      res.cookie('aether_token', sessionToken, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax', maxAge: 7 * 86400000 });
 
       return res.json({
         success: true,
@@ -534,7 +534,7 @@ router.post('/firebase-verify', async (req, res) => {
     const sessionToken = generateToken(newUser);
     await createAuditLog(newUser.id, newUser.email, newUser.role, 'GOOGLE_FIREBASE_VERIFY_REGISTER', 'ACCOUNT', 'Registered new account via verified Firebase ID token');
 
-    res.cookie('aether_token', sessionToken, { httpOnly: true, secure: true, sameSite: 'none', maxAge: 7 * 86400000 });
+    res.cookie('aether_token', sessionToken, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax', maxAge: 7 * 86400000 });
 
     return res.json({
       success: true,
@@ -598,7 +598,7 @@ router.post('/firebase-google', async (req, res) => {
       const token = generateToken(user);
       await createAuditLog(user.id, user.email, user.role, 'GOOGLE_LOGIN', 'SESSION', 'Logged in via Google Authentication');
 
-      res.cookie('aether_token', token, { httpOnly: true, secure: true, sameSite: 'none', maxAge: 7 * 86400000 });
+      res.cookie('aether_token', token, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax', maxAge: 7 * 86400000 });
 
       return res.json({
         success: true,
@@ -661,7 +661,7 @@ router.post('/firebase-google', async (req, res) => {
     const token = generateToken(newUser);
     await createAuditLog(newUser.id, newUser.email, newUser.role, 'GOOGLE_REGISTER', 'ACCOUNT', 'Registered new account with Google');
 
-    res.cookie('aether_token', token, { httpOnly: true, secure: true, sameSite: 'none', maxAge: 7 * 86400000 });
+    res.cookie('aether_token', token, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax', maxAge: 7 * 86400000 });
 
     return res.json({
       success: true,
@@ -923,7 +923,7 @@ router.get('/discord/callback', async (req, res) => {
       const sessionToken = generateToken(user);
       await createAuditLog(user.id, user.email, user.role, 'DISCORD_ACCOUNT_LINKED', 'DISCORD', `Linked Discord account ${discordUsername} (${discordId})`);
 
-      res.cookie('aether_token', sessionToken, { httpOnly: true, secure: true, sameSite: 'none', maxAge: 7 * 86400000 });
+      res.cookie('aether_token', sessionToken, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax', maxAge: 7 * 86400000 });
 
       return res.send(`
         <!DOCTYPE html>
@@ -1025,7 +1025,7 @@ router.get('/discord/callback', async (req, res) => {
     const sessionToken = generateToken(newUser);
     await createAuditLog(newUser.id, newUser.email, newUser.role, 'DISCORD_REGISTER', 'ACCOUNT', 'Registered new account with Discord');
 
-    res.cookie('aether_token', sessionToken, { httpOnly: true, secure: true, sameSite: 'none', maxAge: 7 * 86400000 });
+    res.cookie('aether_token', sessionToken, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax', maxAge: 7 * 86400000 });
 
     return res.send(`
       <!DOCTYPE html>
