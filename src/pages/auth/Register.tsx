@@ -40,7 +40,7 @@ export const Register: React.FC<RegisterProps> = ({ onNavigate }) => {
       window.history.pushState({}, '', redirectUrl);
       window.dispatchEvent(new Event('popstate'));
     } else {
-      onNavigate('dashboard');
+      onNavigate('servers');
     }
   };
 

@@ -37,7 +37,7 @@ export const Login: React.FC<LoginProps> = ({ onNavigate }) => {
       window.history.pushState({}, '', redirectUrl);
       window.dispatchEvent(new Event('popstate'));
     } else {
-      onNavigate('dashboard');
+      onNavigate('servers');
     }
   };
 
