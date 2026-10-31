@@ -43,11 +43,11 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
     const list: SearchItem[] = [
       {
         id: 'nav_dashboard',
-        title: 'Account Dashboard',
+        title: 'My Servers',
         subtitle: 'View your credit balance, recent orders, and quick links',
         category: 'navigation',
         icon: User,
-        action: () => onNavigate('dashboard')
+        action: () => onNavigate('servers')
       },
       {
         id: 'nav_pricing',

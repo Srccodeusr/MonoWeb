@@ -90,7 +90,7 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
           <div>
             <h4 className={headCls}>Quick Links</h4>
             <ul className="space-y-4">
-              <li><button onClick={() => onNavigate('dashboard')} className={linkCls}>Client Area</button></li>
+              <li><button onClick={() => onNavigate('servers')} className={linkCls}>Client Area</button></li>
               <li><button onClick={() => onNavigate('billing')} className={linkCls}>Billing</button></li>
               <li><button onClick={() => onNavigate('docs')} className={linkCls}>Documentation</button></li>
               <li>
