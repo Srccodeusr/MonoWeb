@@ -41,7 +41,15 @@ export function parseUrlToRoute(pathname: string, search: string): RouteState {
   if (first === 'register') return { page: 'register', params: queryObj };
 
   // Customer pages
-  if (first === 'dashboard') return { page: 'dashboard', params: queryObj };
+  // The old dashboard was scrapped: /dashboard (bookmarks, old emails) lands on the server overview.
+  if (first === 'dashboard' || first === 'servers' || first === 'overview') {
+    if (pathParts[1] === 'create' || pathParts[1] === 'new') return { page: 'server-create', params: queryObj };
+    if (pathParts[1] && first === 'servers') return { page: 'server', params: { ...queryObj, id: pathParts[1] } };
+    return { page: 'servers', params: queryObj };
+  }
+  if (first === 'upgrade' || first === 'plans') return { page: 'upgrade', params: queryObj };
+  if (first === 'store' || first === 'shop') return { page: 'store', params: queryObj };
+  if (first === 'earn' || first === 'rewards') return { page: 'earn', params: queryObj };
   if (first === 'billing') return { page: 'billing', params: queryObj };
   if (first === 'checkout') return { page: 'checkout', params: queryObj };
   if (first === 'support') return { page: 'support', params: queryObj };
@@ -59,7 +67,16 @@ export function parseUrlToRoute(pathname: string, search: string): RouteState {
     if (sub === 'billing' || sub === 'payments') return { page: 'admin-billing', params: queryObj };
     if (sub === 'coupons') return { page: 'admin-coupons', params: queryObj };
     if (sub === 'announcements') return { page: 'admin-announcements', params: queryObj };
-    if (sub === 'ads') return { page: 'admin-ads', params: queryObj };
+    if (sub === 'ads' || sub === 'ad-center') return { page: 'admin-ads', params: queryObj };
+    if (sub === 'hosting') return { page: 'admin-hosting', params: queryObj };
+    if (sub === 'nodes') return { page: 'admin-nodes', params: queryObj };
+    if (sub === 'servers') return { page: 'admin-servers', params: queryObj };
+    if (sub === 'accounts') return { page: 'admin-accounts', params: queryObj };
+    if (sub === 'images' || sub === 'software') return { page: 'admin-images', params: queryObj };
+    if (sub === 'hosting-plans') return { page: 'admin-hosting-plans', params: queryObj };
+    if (sub === 'store') return { page: 'admin-store', params: queryObj };
+    if (sub === 'hosting-settings' || sub === 'renewals') return { page: 'admin-hosting-settings', params: queryObj };
+    if (sub === 'stripe') return { page: 'admin-stripe', params: queryObj };
     if (sub === 'discord' || sub === 'bot') return { page: 'admin-discord', params: queryObj };
     if (sub === 'panel-link' || sub === 'panel' || sub === 'panel-integration') return { page: 'admin-panel-link', params: queryObj };
     if (sub === 'appearance' || sub === 'fonts-themes' || sub === 'theme') return { page: 'admin-appearance', params: queryObj };
@@ -105,7 +122,13 @@ export function routeToUrl(page: string, params?: Record<string, any>): string {
     case 'login': return `/login${formatQuery(params)}`;
     case 'register': return `/register${formatQuery(params)}`;
 
-    case 'dashboard': return `/dashboard${formatQuery(params)}`;
+    case 'dashboard':
+    case 'servers': return `/servers${formatQuery(params)}`;
+    case 'server': return `/servers/${encodeURIComponent(String(params?.id || ''))}${formatQuery(params, ['id'])}`;
+    case 'server-create': return `/servers/create${formatQuery(params)}`;
+    case 'upgrade': return `/upgrade${formatQuery(params)}`;
+    case 'store': return `/store${formatQuery(params)}`;
+    case 'earn': return `/earn${formatQuery(params)}`;
     case 'billing': return `/billing${formatQuery(params)}`;
     case 'checkout': return `/checkout${formatQuery(params)}`;
     case 'support': return `/support${formatQuery(params)}`;
@@ -129,6 +152,15 @@ export function routeToUrl(page: string, params?: Record<string, any>): string {
     case 'admin-audit-logs': return `/admin/audit-logs${formatQuery(params)}`;
     case 'admin-api-keys': return `/admin/api-keys${formatQuery(params)}`;
     case 'admin-settings': return `/admin/settings${formatQuery(params)}`;
+    case 'admin-hosting': return `/admin/hosting${formatQuery(params)}`;
+    case 'admin-nodes': return `/admin/nodes${formatQuery(params)}`;
+    case 'admin-servers': return `/admin/servers${formatQuery(params)}`;
+    case 'admin-accounts': return `/admin/accounts${formatQuery(params)}`;
+    case 'admin-images': return `/admin/images${formatQuery(params)}`;
+    case 'admin-hosting-plans': return `/admin/hosting-plans${formatQuery(params)}`;
+    case 'admin-store': return `/admin/store${formatQuery(params)}`;
+    case 'admin-hosting-settings': return `/admin/hosting-settings${formatQuery(params)}`;
+    case 'admin-stripe': return `/admin/stripe${formatQuery(params)}`;
 
     case 'not-found': return params?.attemptedPath || '/404';
 
