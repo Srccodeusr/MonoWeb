@@ -1,7 +1,8 @@
 import { Router, Response, NextFunction } from 'express';
 import { getDb, saveDbSync } from '../db';
 import { authMiddleware, createAuditLog, AuthenticatedRequest } from '../auth';
-import { HostServer, HostBackup } from '../../src/hostingTypes';
+import { HostServer, HostBackup, SubuserPermission } from '../../src/hostingTypes';
+import { Access, accessibleServers, can, resolveAccess } from '../hosting/access';
 import { daemon, daemonFetch, DaemonError } from '../hosting/daemonClient';
 import { newId } from '../hosting/crypto';
 import { allow } from '../hosting/ratelimit';
@@ -28,15 +29,19 @@ function handle(fn: (req: AuthenticatedRequest, res: Response) => Promise<unknow
   };
 }
 
-async function owned(req: AuthenticatedRequest): Promise<{ db: Awaited<ReturnType<typeof getDb>>; server: HostServer }> {
+/**
+ * Resolves the caller's access to a server: owner, or a team member (paid plans). 404 for strangers so server ids
+ * cannot be probed; 403 when a team member lacks the specific permission.
+ */
+export async function member(req: AuthenticatedRequest, perm?: SubuserPermission | 'owner'): Promise<{ db: Awaited<ReturnType<typeof getDb>>; server: HostServer; acc: Access }> {
   const db = await getDb();
-  const server = db.servers.find(s => s.id === req.params.id && s.ownerId === req.user!.id);
-  // 404 (not 403) so server ids cannot be probed for existence.
-  if (!server) throw new HostingError(404, 'NOT_FOUND', 'Server not found.');
-  return { db, server };
+  const acc = resolveAccess(db, req.user!.id, req.params.id);
+  if (!acc) throw new HostingError(404, 'NOT_FOUND', 'Server not found.');
+  if (perm && !can(acc, perm)) throw new HostingError(403, 'NO_PERMISSION', perm === 'owner' ? 'Only the server owner can do that.' : 'You do not have permission to do that on this server.');
+  return { db, server: acc.server, acc };
 }
 
-function publicServer(db: Awaited<ReturnType<typeof getDb>>, s: HostServer, live?: Awaited<ReturnType<typeof liveState>>) {
+function publicServer(db: Awaited<ReturnType<typeof getDb>>, s: HostServer, live?: Awaited<ReturnType<typeof liveState>>, acc?: Pick<Access, 'role' | 'permissions'>) {
   const node = db.nodes.find(n => n.id === s.nodeId);
   const image = db.images.find(i => i.id === s.imageId);
   return {
@@ -46,6 +51,8 @@ function publicServer(db: Awaited<ReturnType<typeof getDb>>, s: HostServer, live
     limits: liveLimits(s), baseLimits: s.limits, upgrades: s.upgrades, createdAt: s.createdAt, expiresAt: s.expiresAt, expiredAt: s.expiredAt, renewCount: s.renewCount,
     variables: (image?.variables || []).filter(v => v.userEditable).map(v => ({ name: v.name, env: v.env, description: v.description, value: s.variables[v.env] ?? v.default })),
     planId: s.planId,
+    role: acc?.role || 'owner', permissions: acc ? [...acc.permissions] : [], transfer: s.transfer,
+    sftp: (() => { const node = db.nodes.find(n => n.id === s.nodeId); return node?.sftpPort ? { host: node.fqdn, port: node.sftpPort } : null; })(),
   };
 }
 
@@ -54,7 +61,8 @@ router.get('/overview', handle(async (req, res) => {
   const db = await getDb();
   const hs = db.settings.hosting!;
   const caps = userCaps(db, req.user!);
-  const mine = userServers(db, req.user!.id);
+  const shared = accessibleServers(db, req.user!.id);
+  const mine = shared.map(x => x.server);
   const lives = await Promise.all(mine.map(s => liveState(db, s)));
   const sym = db.settings.currencySymbol || '$';
   res.json({
@@ -68,7 +76,7 @@ router.get('/overview', handle(async (req, res) => {
       economy: { enabled: hs.economy.enabled, coinName: hs.economy.coinName },
       renew: { ads: hs.renew.ads.enabled, blog: hs.renew.blog.enabled, coins: hs.renew.coins.enabled, coinPrice: hs.renew.coins.priceCoins, coinDays: hs.renew.coins.extendDays },
       currencySymbol: sym,
-      servers: mine.map((s, i) => publicServer(db, s, lives[i])),
+      servers: mine.map((s, i) => publicServer(db, s, lives[i], resolveAccess(db, req.user!.id, s.id) || undefined)),
     },
   });
 }));
@@ -99,9 +107,9 @@ router.get('/catalog', handle(async (req, res) => {
 // ------------------------------------------------------------------------------------------ servers CRUD
 router.get('/servers', handle(async (req, res) => {
   const db = await getDb();
-  const mine = userServers(db, req.user!.id);
+  const mine = accessibleServers(db, req.user!.id).map(x => x.server);
   const lives = await Promise.all(mine.map(s => liveState(db, s)));
-  res.json({ success: true, data: mine.map((s, i) => publicServer(db, s, lives[i])) });
+  res.json({ success: true, data: mine.map((s, i) => publicServer(db, s, lives[i], resolveAccess(db, req.user!.id, s.id) || undefined)) });
 }));
 
 router.post('/servers', handle(async (req, res) => {
@@ -119,12 +127,12 @@ router.post('/servers', handle(async (req, res) => {
 }));
 
 router.get('/servers/:id', handle(async (req, res) => {
-  const { db, server } = await owned(req);
-  res.json({ success: true, data: publicServer(db, server, await liveState(db, server)) });
+  const { db, server, acc } = await member(req);
+  res.json({ success: true, data: publicServer(db, server, await liveState(db, server), acc) });
 }));
 
 router.patch('/servers/:id', handle(async (req, res) => {
-  const { db, server } = await owned(req);
+  const { db, server } = await member(req, 'settings');
   const b = req.body || {};
   if (typeof b.name === 'string') {
     const n = b.name.trim();
@@ -154,7 +162,7 @@ router.patch('/servers/:id', handle(async (req, res) => {
 }));
 
 router.delete('/servers/:id', handle(async (req, res) => {
-  const { db, server } = await owned(req);
+  const { db, server } = await member(req, 'owner');
   await destroyServer(db, server);
   await createAuditLog(req.user!.id, req.user!.email, req.user!.role, 'SERVER_DELETED', server.id, `Deleted server "${server.name}"`);
   res.json({ success: true, message: 'Server deleted.' });
@@ -164,10 +172,11 @@ router.delete('/servers/:id', handle(async (req, res) => {
 function assertUsable(s: HostServer) {
   if (s.status === 'suspended') throw new HostingError(403, 'SUSPENDED', `This server is suspended${s.suspendedReason ? `: ${s.suspendedReason}` : ''}. Contact support.`);
   if (s.status === 'expired') throw new HostingError(403, 'EXPIRED', 'This server has expired. Renew it to bring it back online.');
+  if (s.status === 'transferring') throw new HostingError(409, 'TRANSFERRING', 'This server is being moved to another node. Try again when it finishes.');
 }
 
 router.post('/servers/:id/power', handle(async (req, res) => {
-  const { db, server } = await owned(req);
+  const { db, server } = await member(req, 'power');
   const action = String(req.body?.action);
   if (!['start', 'stop', 'restart', 'kill'].includes(action)) return err(res, 400, 'INVALID_ACTION', 'Invalid power action.');
   if (action !== 'kill' && action !== 'stop') assertUsable(server);
@@ -179,7 +188,7 @@ router.post('/servers/:id/power', handle(async (req, res) => {
 }));
 
 router.post('/servers/:id/command', handle(async (req, res) => {
-  const { db, server } = await owned(req);
+  const { db, server } = await member(req, 'console.command');
   assertUsable(server);
   const command = String(req.body?.command ?? '');
   if (!command.trim() || command.length > 2048) return err(res, 400, 'INVALID_COMMAND', 'Invalid command.');
@@ -189,7 +198,7 @@ router.post('/servers/:id/command', handle(async (req, res) => {
 }));
 
 router.get('/servers/:id/stats', handle(async (req, res) => {
-  const { db, server } = await owned(req);
+  const { db, server } = await member(req, 'console.read');
   const s = await daemon(nodeFor(db, server), 'GET', `/v1/servers/${server.id}/stats`, undefined, { timeoutMs: 8000 }).catch(() => null);
   res.json({ success: true, data: s });
 }));
@@ -197,7 +206,7 @@ router.get('/servers/:id/stats', handle(async (req, res) => {
 // Live console: the browser never talks to the node directly, so node addresses/secrets stay private.
 router.get('/servers/:id/console', async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const { db, server } = await owned(req);
+    const { db, server } = await member(req, 'console.read');
     if (!allow(`console:${req.user!.id}`, 20, 60_000)) return err(res, 429, 'RATE_LIMIT', 'Too many console connections.');
     const upstream = await daemonFetch(nodeFor(db, server), 'GET', `/v1/servers/${server.id}/logs?tail=200`, undefined, { timeoutMs: 0 });
     if (!upstream.ok || !upstream.body) return err(res, 502, 'NODE_ERROR', 'Could not open the console.');
@@ -221,32 +230,32 @@ router.get('/servers/:id/console', async (req: AuthenticatedRequest, res: Respon
 const q = (v: unknown) => encodeURIComponent(String(v ?? '/'));
 
 router.get('/servers/:id/files', handle(async (req, res) => {
-  const { db, server } = await owned(req);
+  const { db, server } = await member(req, 'files.read');
   res.json({ success: true, data: await daemon(nodeFor(db, server), 'GET', `/v1/servers/${server.id}/files?path=${q(req.query.path)}`) });
 }));
 router.get('/servers/:id/files/content', handle(async (req, res) => {
-  const { db, server } = await owned(req);
+  const { db, server } = await member(req, 'files.read');
   res.json({ success: true, data: await daemon(nodeFor(db, server), 'GET', `/v1/servers/${server.id}/files/content?path=${q(req.query.path)}`) });
 }));
 router.put('/servers/:id/files/content', handle(async (req, res) => {
-  const { db, server } = await owned(req); assertUsable(server);
+  const { db, server } = await member(req, 'files.write'); assertUsable(server);
   res.json({ success: true, data: await daemon(nodeFor(db, server), 'PUT', `/v1/servers/${server.id}/files/content`, { path: req.body?.path, content: req.body?.content }) });
 }));
 for (const op of ['mkdir', 'rename', 'delete', 'extract'] as const) {
   router.post(`/servers/:id/files/${op}`, handle(async (req, res) => {
-    const { db, server } = await owned(req); assertUsable(server);
+    const { db, server } = await member(req, 'files.write'); assertUsable(server);
     res.json({ success: true, data: await daemon(nodeFor(db, server), 'POST', `/v1/servers/${server.id}/files/${op}`, req.body || {}) });
   }));
 }
 router.post('/servers/:id/files/upload', handle(async (req, res) => {
-  const { db, server } = await owned(req); assertUsable(server);
+  const { db, server } = await member(req, 'files.write'); assertUsable(server);
   const b = req.body || {};
   if (typeof b.data !== 'string' || b.data.length > 9_000_000) return err(res, 413, 'TOO_LARGE', 'Files over ~6 MB must be uploaded with SFTP/git or the console.');
   res.json({ success: true, data: await daemon(nodeFor(db, server), 'POST', `/v1/servers/${server.id}/files/upload`, { path: b.path, name: b.name, data: b.data }, { timeoutMs: 60_000 }) });
 }));
 router.get('/servers/:id/files/download', async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const { db, server } = await owned(req);
+    const { db, server } = await member(req, 'files.read');
     const up = await daemonFetch(nodeFor(db, server), 'GET', `/v1/servers/${server.id}/files/download?path=${q(req.query.path)}`, undefined, { timeoutMs: 120_000 });
     if (!up.ok || !up.body) return err(res, up.status === 404 ? 404 : 502, 'NODE_ERROR', 'Download failed.');
     res.writeHead(200, { 'Content-Type': 'application/octet-stream', 'Content-Disposition': up.headers.get('content-disposition') || 'attachment', 'X-Content-Type-Options': 'nosniff' });
@@ -259,11 +268,11 @@ router.get('/servers/:id/files/download', async (req: AuthenticatedRequest, res:
 
 // ------------------------------------------------------------------------------------------ backups
 router.get('/servers/:id/backups', handle(async (req, res) => {
-  const { db, server } = await owned(req);
+  const { db, server } = await member(req, 'backups');
   res.json({ success: true, data: { limit: server.limits.backups, items: db.backups.filter(b => b.serverId === server.id).sort((a, b) => b.createdAt.localeCompare(a.createdAt)) } });
 }));
 router.post('/servers/:id/backups', handle(async (req, res) => {
-  const { db, server } = await owned(req); assertUsable(server);
+  const { db, server } = await member(req, 'backups'); assertUsable(server);
   const existing = db.backups.filter(b => b.serverId === server.id).length;
   if (server.limits.backups <= 0) return err(res, 403, 'NO_BACKUPS', 'Backups are not included in your plan.');
   if (existing >= server.limits.backups) return err(res, 403, 'BACKUP_LIMIT', `Backup limit reached (${server.limits.backups}). Delete one first.`);
@@ -274,14 +283,14 @@ router.post('/servers/:id/backups', handle(async (req, res) => {
   res.status(201).json({ success: true, data: rec });
 }));
 router.post('/servers/:id/backups/:backupId/restore', handle(async (req, res) => {
-  const { db, server } = await owned(req); assertUsable(server);
+  const { db, server } = await member(req, 'backups'); assertUsable(server);
   if (!db.backups.some(b => b.id === req.params.backupId && b.serverId === server.id)) return err(res, 404, 'NOT_FOUND', 'Backup not found.');
   await daemon(nodeFor(db, server), 'POST', `/v1/servers/${server.id}/backups/${req.params.backupId}/restore`, {}, { timeoutMs: 10 * 60_000 });
   dropStateCache(server.id);
   res.json({ success: true });
 }));
 router.delete('/servers/:id/backups/:backupId', handle(async (req, res) => {
-  const { db, server } = await owned(req);
+  const { db, server } = await member(req, 'backups');
   const b = db.backups.find(x => x.id === req.params.backupId && x.serverId === server.id);
   if (!b) return err(res, 404, 'NOT_FOUND', 'Backup not found.');
   await daemon(nodeFor(db, server), 'DELETE', `/v1/servers/${server.id}/backups/${b.id}`).catch(() => undefined);
@@ -291,7 +300,7 @@ router.delete('/servers/:id/backups/:backupId', handle(async (req, res) => {
 
 // ------------------------------------------------------------------------------------------ renew with coins
 router.post('/servers/:id/renew', handle(async (req, res) => {
-  const { db, server } = await owned(req);
+  const { db, server } = await member(req, 'owner');
   const hs = db.settings.hosting!;
   const method = String(req.body?.method);
   const user = db.users.find(u => u.id === req.user!.id)!;

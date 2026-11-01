@@ -8,7 +8,8 @@ import { HostNode } from '../../src/hostingTypes';
 import { encryptSecret, maskSecret, decryptSecret, newId, randomToken } from '../hosting/crypto';
 import { configureCommand, daemon, pingNode } from '../hosting/daemonClient';
 import { defaultHostingSettings, sanitizeHostingSettings, sanitizePlan } from '../hosting/plans';
-import { sanitizeImage, sanitizeNode, sanitizeStoreItem } from '../hosting/sanitize';
+import { sanitizeAddon, sanitizeImage, sanitizeNode, sanitizeStoreItem } from '../hosting/sanitize';
+import { backupDbNow, dbInfo } from '../db';
 import { destroyServer, liveLimits, liveState, nodeUsage, pushSpec, refreshNodeStatuses, renewServer, stopQuietly } from '../hosting/serverService';
 import { publicBaseUrl } from '../hosting/billing';
 import { testStripe } from '../hosting/stripe';
@@ -60,7 +61,7 @@ router.post('/nodes', wrap(async (req, res) => {
   await audit(req, 'NODE_CREATED', node.id, `Added node ${node.name}`);
   const panelUrl = publicBaseUrl(req as any);
   // The secret is shown exactly once, together with the command to run on the node.
-  res.status(201).json({ success: true, data: { node: publicNode(db, node), secret, command: configureCommand(panelUrl, secret, node.daemonPort), panelUrl } });
+  res.status(201).json({ success: true, data: { node: publicNode(db, node), secret, command: configureCommand(panelUrl, secret, node.daemonPort, undefined, node.sftpPort), panelUrl } });
 }));
 
 router.put('/nodes/:id', wrap(async (req, res) => {
@@ -73,7 +74,7 @@ router.post('/nodes/:id/rotate-secret', wrap(async (req, res) => {
   const db = await getDb(); const n = db.nodes.find(x => x.id === req.params.id); if (!n) return err(res, 404, 'Node not found.');
   const secret = randomToken(36); n.secretEnc = encryptSecret(secret); n.status = { ...n.status, online: false }; saveDbSync();
   await audit(req, 'NODE_SECRET_ROTATED', n.id, `Rotated secret for ${n.name}`);
-  res.json({ success: true, data: { secret, command: configureCommand(publicBaseUrl(req as any), secret, n.daemonPort) } });
+  res.json({ success: true, data: { secret, command: configureCommand(publicBaseUrl(req as any), secret, n.daemonPort, undefined, n.sftpPort) } });
 }));
 
 router.post('/nodes/:id/test', wrap(async (req, res) => {
@@ -295,6 +296,45 @@ router.post('/stripe/test', wrap(async (req, res) => {
   try { const r = await testStripe({ secretKey: key }); if (g) { g.lastTestedAt = new Date().toISOString(); g.lastTestOk = true; saveDbSync(); } res.json({ success: true, data: r }); }
   catch (e: any) { if (g) { g.lastTestedAt = new Date().toISOString(); g.lastTestOk = false; saveDbSync(); } err(res, 400, e.message, 'STRIPE_TEST_FAILED'); }
 }));
+
+// ============================================================================ addon store
+router.get('/addons', wrap(async (_req, res) => { const db = await getDb(); res.json({ success: true, data: { items: db.addons, images: db.images.map(i => ({ id: i.id, name: i.name })) } }); }));
+router.post('/addons', wrap(async (req, res) => {
+  const db = await getDb(); const now = new Date().toISOString();
+  const a = { id: newId('addon'), ...sanitizeAddon(req.body, db.images.map(i => i.id)), installs: 0, createdAt: now, updatedAt: now };
+  db.addons.push(a); saveDbSync(); await audit(req, 'ADDON_CREATED', a.id, a.name); res.status(201).json({ success: true, data: a });
+}));
+router.put('/addons/:id', wrap(async (req, res) => {
+  const db = await getDb(); const a = db.addons.find(x => x.id === req.params.id); if (!a) return err(res, 404, 'Addon not found.');
+  Object.assign(a, sanitizeAddon(req.body, db.images.map(i => i.id), a), { updatedAt: new Date().toISOString() }); saveDbSync(); await audit(req, 'ADDON_UPDATED', a.id, a.name); res.json({ success: true, data: a });
+}));
+router.delete('/addons/:id', wrap(async (req, res) => {
+  const db = await getDb(); const a = db.addons.find(x => x.id === req.params.id); if (!a) return err(res, 404, 'Addon not found.');
+  const used = db.addonInstalls.filter(i => i.addonId === a.id).length;
+  if (used && req.query.force !== '1') return err(res, 409, `${used} server(s) have this addon installed. Disable it instead, or delete with force (their files stay).`);
+  db.addons = db.addons.filter(x => x.id !== a.id); saveDbSync(); await audit(req, 'ADDON_DELETED', a.id, a.name); res.json({ success: true });
+}));
+
+// ============================================================================ database (SQLite)
+const BACKUP_DIR = path.join(process.cwd(), 'data', 'backups');
+router.get('/database', wrap(async (_req, res) => {
+  const files = fs.existsSync(BACKUP_DIR) ? fs.readdirSync(BACKUP_DIR).filter(f => /^mono-[\w.-]+\.sqlite$/.test(f)).map(f => { const st = fs.statSync(path.join(BACKUP_DIR, f)); return { name: f, size: st.size, createdAt: st.mtime.toISOString() }; }).sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 30) : [];
+  res.json({ success: true, data: { ...dbInfo(), backups: files } });
+}));
+router.post('/database/backup', wrap(async (req, res) => {
+  if (!allowBackup()) return err(res, 429, 'Please wait a minute between backups.');
+  const dest = backupDbNow(); await audit(req, 'DATABASE_BACKUP', 'db', path.basename(dest));
+  res.json({ success: true, data: { name: path.basename(dest), size: fs.statSync(dest).size } });
+}));
+router.get('/database/backups/:name', wrap(async (req, res) => {
+  const name = String(req.params.name);
+  if (!/^mono-[\w.-]+\.sqlite$/.test(name)) return err(res, 400, 'Invalid backup name.');
+  const file = path.join(BACKUP_DIR, name); if (!fs.existsSync(file)) return err(res, 404, 'Backup not found.');
+  await audit(req, 'DATABASE_BACKUP_DOWNLOAD', 'db', name);
+  res.set({ 'Content-Type': 'application/octet-stream', 'Content-Disposition': `attachment; filename="${name}"`, 'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'no-store' });
+  fs.createReadStream(file).pipe(res);
+}));
+let lastBackup = 0; const allowBackup = () => { if (Date.now() - lastBackup < 60_000) return false; lastBackup = Date.now(); return true; };
 
 // ============================================================================ media library (ad banners / images)
 const UPLOAD_DIR = path.join(process.cwd(), 'data', 'uploads');

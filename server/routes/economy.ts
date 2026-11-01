@@ -5,6 +5,7 @@ import { authMiddleware, AuthenticatedRequest, createAuditLog } from '../auth';
 import { User } from '../../src/types';
 import { HostServer, StoreItem } from '../../src/hostingTypes';
 import { newId } from '../hosting/crypto';
+import { addCoinsTo } from '../hosting/coins';
 import { allow } from '../hosting/ratelimit';
 import { HostingError, liveLimits, pushSpec, renewServer, userCaps } from '../hosting/serverService';
 import { getClientIp } from '../services/requestProtection';
@@ -23,11 +24,7 @@ const wrap = (fn: (req: AuthenticatedRequest, res: Response) => Promise<unknown>
 
 const startOfDay = () => { const d = new Date(); d.setUTCHours(0, 0, 0, 0); return d.getTime(); };
 
-export function addCoins(db: DatabaseSchema, user: User, amount: number, reason: string, ref?: string): void {
-  user.coins = Math.max(0, Math.round(((user.coins || 0) + amount) * 100) / 100);
-  db.coinTx.unshift({ id: newId('ctx'), userId: user.id, amount, balanceAfter: user.coins, reason, ref, createdAt: new Date().toISOString() });
-  if (db.coinTx.length > 20000) db.coinTx.length = 20000;
-}
+export const addCoins = addCoinsTo;
 
 const doneToday = (db: DatabaseSchema, userId: string, kind: 'ad' | 'blog', purpose?: 'coins' | 'renew') =>
   db.earnSessions.filter(s => s.userId === userId && s.kind === kind && s.claimedAt && new Date(s.claimedAt).getTime() >= startOfDay() && (!purpose || s.purpose === purpose));
