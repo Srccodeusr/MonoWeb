@@ -73,7 +73,7 @@ export const Badge: React.FC<{ tone?: 'green' | 'amber' | 'red' | 'zinc' | 'blue
 };
 
 export const statusTone = (s: string): 'green' | 'amber' | 'red' | 'zinc' | 'blue' =>
-  s === 'running' ? 'green' : ['installing', 'starting'].includes(s) ? 'blue' : ['expired', 'suspended', 'install_failed'].includes(s) ? 'red' : 'zinc';
+  s === 'running' ? 'green' : ['installing', 'starting', 'transferring'].includes(s) ? 'blue' : ['expired', 'suspended', 'install_failed'].includes(s) ? 'red' : 'zinc';
 
 export const Modal: React.FC<{ open: boolean; onClose: () => void; title: string; children: React.ReactNode; wide?: boolean; footer?: React.ReactNode }> = ({ open, onClose, title, children, wide, footer }) => {
   useEffect(() => {
