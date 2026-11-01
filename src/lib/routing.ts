@@ -50,6 +50,7 @@ export function parseUrlToRoute(pathname: string, search: string): RouteState {
   if (first === 'upgrade' || first === 'plans') return { page: 'upgrade', params: queryObj };
   if (first === 'store' || first === 'shop') return { page: 'store', params: queryObj };
   if (first === 'earn' || first === 'rewards') return { page: 'earn', params: queryObj };
+  if (first === 'addons' || first === 'addon-store') return { page: 'addons', params: queryObj };
   if (first === 'billing') return { page: 'billing', params: queryObj };
   if (first === 'checkout') return { page: 'checkout', params: queryObj };
   if (first === 'support') return { page: 'support', params: queryObj };
@@ -77,6 +78,7 @@ export function parseUrlToRoute(pathname: string, search: string): RouteState {
     if (sub === 'store') return { page: 'admin-store', params: queryObj };
     if (sub === 'hosting-settings' || sub === 'renewals') return { page: 'admin-hosting-settings', params: queryObj };
     if (sub === 'stripe') return { page: 'admin-stripe', params: queryObj };
+    if (sub === 'addons') return { page: 'admin-addons', params: queryObj };
     if (sub === 'discord' || sub === 'bot') return { page: 'admin-discord', params: queryObj };
     if (sub === 'panel-link' || sub === 'panel' || sub === 'panel-integration') return { page: 'admin-panel-link', params: queryObj };
     if (sub === 'appearance' || sub === 'fonts-themes' || sub === 'theme') return { page: 'admin-appearance', params: queryObj };
@@ -129,6 +131,7 @@ export function routeToUrl(page: string, params?: Record<string, any>): string {
     case 'upgrade': return `/upgrade${formatQuery(params)}`;
     case 'store': return `/store${formatQuery(params)}`;
     case 'earn': return `/earn${formatQuery(params)}`;
+    case 'addons': return `/addons${formatQuery(params)}`;
     case 'billing': return `/billing${formatQuery(params)}`;
     case 'checkout': return `/checkout${formatQuery(params)}`;
     case 'support': return `/support${formatQuery(params)}`;
@@ -161,6 +164,7 @@ export function routeToUrl(page: string, params?: Record<string, any>): string {
     case 'admin-store': return `/admin/store${formatQuery(params)}`;
     case 'admin-hosting-settings': return `/admin/hosting-settings${formatQuery(params)}`;
     case 'admin-stripe': return `/admin/stripe${formatQuery(params)}`;
+    case 'admin-addons': return `/admin/addons${formatQuery(params)}`;
 
     case 'not-found': return params?.attemptedPath || '/404';
 
