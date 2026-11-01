@@ -13,13 +13,30 @@ import {
   ProvisionRecord, PanelIntegrationSettings, QuickLink
 } from '../src/types';
 import {
-  HostNode, HostImage, HostServer, HostBackup, HostingPlan, StoreItem, Entitlement, CoinTx, EarnSession, MediaItem
+  HostNode, HostImage, HostServer, HostBackup, HostingPlan, StoreItem, Entitlement, CoinTx, EarnSession, MediaItem,
+  HostSubuser, HostSchedule, HostSftpCred, Addon, AddonInstall
 } from '../src/hostingTypes';
+import { SqliteStore } from './storage/sqliteStore';
+import { defaultAddons } from './hosting/seed';
 import { defaultPlans as defaultHostingPlans, defaultHostingSettings } from './hosting/plans';
 import { defaultImages, defaultStoreItems } from './hosting/seed';
 
 const DATA_DIR = path.join(process.cwd(), 'data');
-const DB_FILE = path.join(DATA_DIR, 'db.json');
+const DB_FILE = path.join(DATA_DIR, 'db.json');                       // legacy JSON database (auto-imported once, then renamed)
+const SQLITE_FILE = process.env.DATABASE_FILE ? path.resolve(process.env.DATABASE_FILE) : path.join(DATA_DIR, 'mono.sqlite');
+
+/** Array collections stored one row per object (every item must have a string `id`). */
+const DOC_COLLECTIONS = [
+  'users', 'products', 'plans', 'orders', 'coupons', 'tickets', 'announcements', 'mail', 'auditLogs', 'ads', 'adEvents',
+  'discordAuditLogs', 'apiKeys', 'apiAuditLogs', 'webhooks', 'legalPages', 'statusComponents', 'incidents', 'scheduledMaintenances', 'provisions',
+  'nodes', 'images', 'servers', 'backups', 'hostingPlans', 'storeItems', 'entitlements', 'coinTx', 'earnSessions', 'media',
+  'subusers', 'schedules', 'sftpCreds', 'addons', 'addonInstalls',
+];
+/** Record collections stored one row per key. */
+const MAP_COLLECTIONS = ['passwords', 'discordLinks'];
+
+let store: SqliteStore | null = null;
+export function getStore(): SqliteStore { if (!store) store = new SqliteStore(SQLITE_FILE, { docs: DOC_COLLECTIONS, maps: MAP_COLLECTIONS }); return store; }
 
 export interface DatabaseSchema {
   installationId?: string;
@@ -58,6 +75,11 @@ export interface DatabaseSchema {
   earnSessions: EarnSession[];
   media: MediaItem[];
   processedWebhooks: string[]; // Stripe event ids already applied (idempotency)
+  subusers: HostSubuser[];
+  schedules: HostSchedule[];
+  sftpCreds: HostSftpCred[];
+  addons: Addon[];
+  addonInstalls: AddonInstall[];
 }
 
 const defaultProducts: Product[] = [
@@ -368,7 +390,12 @@ function defaultDb(): DatabaseSchema {
     coinTx: [],
     earnSessions: [],
     media: [],
-    processedWebhooks: []
+    processedWebhooks: [],
+    subusers: [],
+    schedules: [],
+    sftpCreds: [],
+    addons: defaultAddons(),
+    addonInstalls: []
   };
 }
 
@@ -393,7 +420,10 @@ export async function getDb(reload = false): Promise<DatabaseSchema> {
       const generatedPw = !envPw || envPw === 'change_me_secure_admin_password' ? crypto.randomBytes(12).toString('base64url') : '';
       const adminPassword = generatedPw || envPw!;
 
-      if (fs.existsSync(DB_FILE)) {
+      dbCache = getStore().load() as DatabaseSchema | null;
+      let importedLegacy = false;
+      if (!dbCache && fs.existsSync(DB_FILE)) {
+        importedLegacy = true;
         try {
           const raw = fs.readFileSync(DB_FILE, 'utf-8');
           dbCache = JSON.parse(raw);
@@ -483,6 +513,18 @@ export async function getDb(reload = false): Promise<DatabaseSchema> {
         if (!Array.isArray(dbCache.earnSessions)) dbCache.earnSessions = [];
         if (!Array.isArray(dbCache.media)) dbCache.media = [];
         if (!Array.isArray(dbCache.processedWebhooks)) dbCache.processedWebhooks = [];
+        if (!Array.isArray(dbCache.subusers)) dbCache.subusers = [];
+        if (!Array.isArray(dbCache.schedules)) dbCache.schedules = [];
+        if (!Array.isArray(dbCache.sftpCreds)) dbCache.sftpCreds = [];
+        if (!Array.isArray(dbCache.addons)) dbCache.addons = defaultAddons();
+        if (!Array.isArray(dbCache.addonInstalls)) dbCache.addonInstalls = [];
+        // Plans saved before subusers/schedules/SFTP existed: grant sensible defaults to plans that already advertise the feature.
+        for (const hp of dbCache.hostingPlans) {
+          const ps: any = hp.perServer, f: any = hp.features;
+          if (ps.subusers === undefined) ps.subusers = f.subusers ? 3 : 0;
+          if (ps.schedules === undefined) ps.schedules = f.scheduledTasks ? 5 : 0;
+          if (f.sftp === undefined) f.sftp = !hp.isFree;
+        }
         dbCache.settings.hosting = { ...defaultHostingSettings(), ...(dbCache.settings.hosting || {}) };
         if (!dbCache.installationId) dbCache.installationId = getInstallationId();
       } else {
@@ -513,7 +555,14 @@ export async function getDb(reload = false): Promise<DatabaseSchema> {
         if (generatedPw) console.log(`[Database/INFO] Generated admin password (shown once, change it after first login): ${generatedPw}`);
       }
 
-      saveDbSync();
+      normalizeIds(dbCache);
+      flushDbNow();
+      if (importedLegacy && fs.existsSync(DB_FILE)) {
+        const done = `${DB_FILE}.migrated-${Date.now()}`;
+        try { fs.renameSync(DB_FILE, done); console.log(`[Database/INFO] Imported ${DB_FILE} into SQLite (${SQLITE_FILE}). The old file was kept as ${done}.`); } catch { /* keep going */ }
+      } else if (!importedLegacy) {
+        console.log(`[Database/INFO] Using SQLite database at ${SQLITE_FILE}`);
+      }
       return dbCache;
     } catch (err) {
       console.error('[Database/CRITICAL] Failed to initialize database:', err);
@@ -525,26 +574,50 @@ export async function getDb(reload = false): Promise<DatabaseSchema> {
   return initPromise;
 }
 
+/** Items must have a string id to live in a SQLite row. Old/hand-edited data without one gets a generated id. */
+function normalizeIds(db: DatabaseSchema): void {
+  let fixed = 0;
+  for (const coll of DOC_COLLECTIONS) {
+    const arr = (db as any)[coll];
+    if (!Array.isArray(arr)) continue;
+    for (const item of arr) if (item && typeof item === 'object' && (typeof item.id !== 'string' || !item.id)) { item.id = `legacy_${coll}_${Date.now().toString(36)}${fixed++}`; }
+  }
+  if (fixed) console.warn(`[Database/WARN] Generated ids for ${fixed} legacy record(s) that had none.`);
+}
+
+/** Write pending changes to SQLite right now (one transaction, only changed rows). */
+export function flushDbNow(): void {
+  if (!dbCache) return;
+  if (saveTimeout) { clearTimeout(saveTimeout); saveTimeout = null; }
+  try {
+    getStore().save(dbCache as any);
+  } catch (err) {
+    console.error('[Database/ERROR] Failed to persist database:', err);
+  }
+}
+
+/** Debounced save (the name is historical: callers use it after every mutation). Coalesces bursts into one transaction. */
 export function saveDbSync(): void {
   if (!dbCache) return;
   if (saveTimeout) clearTimeout(saveTimeout);
-
-  saveTimeout = setTimeout(() => {
-    try {
-      if (!fs.existsSync(DATA_DIR)) {
-        fs.mkdirSync(DATA_DIR, { recursive: true });
-      }
-      // Atomic: write a temp file then rename, so a crash mid-write can never leave a truncated db.json.
-      const tmp = `${DB_FILE}.${process.pid}.tmp`;
-      fs.writeFileSync(tmp, JSON.stringify(dbCache), { encoding: 'utf-8', mode: 0o600 });
-      fs.renameSync(tmp, DB_FILE);
-    } catch (err) {
-      console.error('[Database/ERROR] Failed to persist database to disk:', err);
-    }
-  }, 150);
+  saveTimeout = setTimeout(() => { saveTimeout = null; flushDbNow(); }, 150);
 }
 
 // Async alias kept for route modules that await the save call
 export async function saveDb(): Promise<void> {
   saveDbSync();
 }
+
+export function dbInfo() { return getStore().stats(); }
+
+/** Consistent online backup into data/backups/. Returns the file path. */
+export function backupDbNow(): string {
+  flushDbNow();
+  const dest = path.join(DATA_DIR, 'backups', `mono-${new Date().toISOString().replace(/[:.]/g, '-')}.sqlite`);
+  getStore().backup(dest);
+  return dest;
+}
+
+// Never lose the last debounced write on shutdown.
+for (const sig of ['SIGINT', 'SIGTERM'] as const) process.once(sig, () => { flushDbNow(); getStore().close(); process.exit(0); });
+process.once('beforeExit', () => { flushDbNow(); });
