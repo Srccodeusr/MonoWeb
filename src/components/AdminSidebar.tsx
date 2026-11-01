@@ -18,6 +18,7 @@ const GROUPS: { title: string; items: Item[] }[] = [
     { page: 'admin-servers', label: 'Server Management', icon: Server },
     { page: 'admin-accounts', label: 'Account Management', icon: UserCog },
     { page: 'admin-images', label: 'Software Images', icon: Boxes },
+    { page: 'admin-addons', label: 'Addon Store', icon: Package },
   ] },
   { title: 'Plans & Revenue', items: [
     { page: 'admin-hosting-plans', label: 'Plans & Limits', icon: Crown },
