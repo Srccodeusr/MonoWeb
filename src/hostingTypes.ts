@@ -21,6 +21,8 @@ export interface PerServerLimits {
   databases: number;
   ports: number;          // extra host ports besides the image defaults
   pids: number;
+  subusers: number;       // team members per server (paid plans only: needs features.subusers)
+  schedules: number;      // scheduled tasks per server (paid plans only: needs features.scheduledTasks)
 }
 
 export interface PlanFeatures {
@@ -33,6 +35,7 @@ export interface PlanFeatures {
   switchNode: boolean;
   discordRole: boolean;
   giveaways: boolean;
+  sftp: boolean;           // SFTP access to server files
 }
 
 export type RenewMethod = 'ads' | 'blog' | 'coins' | 'payment';
@@ -82,6 +85,7 @@ export interface HostNode {
   fqdn: string;                // address users connect to
   daemonHost: string;          // address the panel calls (often the same as fqdn)
   daemonPort: number;
+  sftpPort: number;            // 0 = SFTP not offered on this node
   scheme: 'http' | 'https';
   secretEnc: string;           // AES-GCM encrypted daemon secret (never sent to the browser)
   ramMB: number;
@@ -129,7 +133,7 @@ export interface HostImage {
   createdAt: string;
 }
 
-export type ServerState = 'installing' | 'offline' | 'running' | 'starting' | 'suspended' | 'expired' | 'install_failed';
+export type ServerState = 'installing' | 'offline' | 'running' | 'starting' | 'suspended' | 'expired' | 'install_failed' | 'transferring';
 
 export interface HostServer {
   id: string;                  // also the daemon-side id
@@ -153,6 +157,8 @@ export interface HostServer {
   lastRenewedAt?: string;
   renewCount: number;
   notifiedExpiry?: boolean;
+  /** Set while (or after a failed attempt at) moving the server to another node. */
+  transfer?: { state: 'running' | 'failed'; fromNodeId: string; toNodeId: string; startedAt: string; step?: string; error?: string };
 }
 
 export interface HostBackup {
@@ -281,4 +287,83 @@ export interface HostingPublicSettings {
   economy: { enabled: boolean; coinName: string };
   renew: { ads: boolean; blog: boolean; coins: boolean };
   currencySymbol: string;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Team access, scheduled tasks, SFTP, addons
+// ---------------------------------------------------------------------------------------------
+export const SUBUSER_PERMISSIONS = ['console.read', 'console.command', 'power', 'files.read', 'files.write', 'backups', 'schedules', 'addons', 'sftp', 'settings'] as const;
+export type SubuserPermission = typeof SUBUSER_PERMISSIONS[number];
+
+export interface HostSubuser {
+  id: string;
+  serverId: string;
+  userId: string;
+  permissions: SubuserPermission[];
+  addedBy: string;
+  createdAt: string;
+}
+
+export type ScheduleAction = 'command' | 'power' | 'backup';
+export interface ScheduleTask { action: ScheduleAction; payload: string; delaySec: number }
+
+export interface HostSchedule {
+  id: string;
+  serverId: string;
+  name: string;
+  cron: string;                 // 5-field cron, evaluated in UTC
+  enabled: boolean;
+  tasks: ScheduleTask[];
+  lastRunAt?: string;
+  lastStatus?: 'ok' | 'failed' | 'skipped';
+  lastError?: string;
+  nextRunAt?: string;
+  createdBy: string;
+  createdAt: string;
+}
+
+/** SFTP login for one person on one server. Only a scrypt hash is stored; the daemon gets the same hash. */
+export interface HostSftpCred {
+  id: string;
+  serverId: string;
+  userId: string;
+  username: string;             // <panel username>.<first 8 of server id>
+  passwordHash: string;         // scrypt$N$r$p$salt$hash
+  readOnly: boolean;
+  createdAt: string;
+}
+
+export interface Addon {
+  id: string;
+  name: string;
+  slug: string;
+  description: string;
+  iconUrl?: string;
+  category: string;             // "Plugins", "Mods", "Templates", "Tools" …
+  author: string;
+  version: string;
+  priceCoins: number;           // 0 = free
+  priceMoney: number;           // 0 = coins/free only
+  isActive: boolean;
+  featured: boolean;
+  /** Empty = works with every image. */
+  compatibleImageIds: string[];
+  /** Files downloaded into the server by the node (SSRF-guarded). `extract` unpacks .zip/.tar.gz in place. */
+  files: { url: string; path: string; extract: boolean }[];
+  /** Console command sent after install (only if the server is running), e.g. "reload". */
+  postCommand?: string;
+  restartAfter: boolean;
+  installs: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AddonInstall {
+  id: string;
+  serverId: string;
+  addonId: string;
+  userId: string;
+  version: string;
+  paths: string[];              // what was written, so Uninstall can remove it
+  installedAt: string;
 }

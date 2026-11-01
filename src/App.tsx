@@ -38,6 +38,8 @@ import { ServerDetail } from './pages/panel/ServerDetail';
 import { Upgrade } from './pages/panel/Upgrade';
 import { Store } from './pages/panel/Store';
 import { Earn } from './pages/panel/Earn';
+import { Addons } from './pages/panel/Addons';
+import { AdminAddons } from './pages/admin/AdminAddons';
 import { Billing } from './pages/customer/Billing';
 import { Checkout } from './pages/customer/Checkout';
 import { SupportTickets } from './pages/customer/SupportTickets';
@@ -314,6 +316,7 @@ function AppContent() {
                 {currentPage === 'upgrade' && <Upgrade onNavigate={handleNavigate} />}
                 {currentPage === 'store' && <Store onNavigate={handleNavigate} />}
                 {currentPage === 'earn' && <Earn onNavigate={handleNavigate} />}
+                {currentPage === 'addons' && <Addons onNavigate={handleNavigate} />}
                 {currentPage === 'billing' && <Billing onNavigate={handleNavigate} />}
                 {currentPage === 'checkout' && <Checkout onNavigate={handleNavigate} params={pageParams} />}
                 {currentPage === 'support' && <SupportTickets onNavigate={handleNavigate} />}
@@ -344,6 +347,7 @@ function AppContent() {
                 {currentPage === 'admin-store' && <AdminStore />}
                 {currentPage === 'admin-hosting-settings' && <AdminHostingSettings />}
                 {currentPage === 'admin-stripe' && <AdminStripe />}
+                {currentPage === 'admin-addons' && <AdminAddons />}
                 {currentPage === 'admin-discord' && <AdminDiscord />}
                 {currentPage === 'admin-appearance' && <AdminAppearance />}
                 {currentPage === 'admin-panel-link' && <PanelLinkSettings />}
