@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Server, Plus, Star, ShoppingBag, Coins, User as UserIcon, LogOut, CreditCard, LifeBuoy, Mail, Activity, MoreHorizontal, Info, CheckCircle2, Loader2 } from 'lucide-react';
+import { Server, Plus, Star, ShoppingBag, Coins, User as UserIcon, LogOut, CreditCard, LifeBuoy, Mail, Activity, MoreHorizontal, Info, CheckCircle2, Loader2, Package } from 'lucide-react';
 import { useAuth } from '../../lib/AuthContext';
 import { apiRequest } from '../../lib/api';
 import { AdBanner } from '../AdBanner';
@@ -9,7 +9,7 @@ import { cx } from '../ui/kit';
 interface Props { currentPage: string; onNavigate: (page: string, params?: any) => void; children: React.ReactNode }
 
 const TABS = [
-  { page: 'servers', label: 'Servers', icon: Server, match: ['servers', 'server'] },
+  { page: 'servers', label: 'Servers', icon: Server, match: ['servers', 'server', 'addons'] },
   { page: 'server-create', label: 'Create', icon: Plus, match: ['server-create'] },
   { page: 'upgrade', label: 'Upgrade', icon: Star, match: ['upgrade'] },
   { page: 'store', label: 'Store', icon: ShoppingBag, match: ['store'] },
@@ -17,6 +17,7 @@ const TABS = [
   { page: 'settings', label: 'Account', icon: UserIcon, match: ['settings'] },
 ];
 const MORE = [
+  { page: 'addons', label: 'Addon Store', icon: Package },
   { page: 'billing', label: 'Billing & credits', icon: CreditCard },
   { page: 'support', label: 'Support', icon: LifeBuoy },
   { page: 'mail', label: 'Inbox', icon: Mail },

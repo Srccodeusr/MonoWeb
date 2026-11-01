@@ -8,6 +8,9 @@ export interface PanelServer {
   limits: { ramMB: number; cpuPercent: number; diskMB: number; swapMB: number; backups: number; databases: number };
   baseLimits: PanelServer['limits']; upgrades: any[]; createdAt: string; expiresAt?: string; expiredAt?: string; renewCount: number;
   variables: { name: string; env: string; description: string; value: string }[]; planId: string;
+  role: 'owner' | 'subuser'; permissions: string[];
+  transfer?: { state: 'running' | 'failed'; fromNodeId: string; toNodeId: string; startedAt: string; step?: string; error?: string };
+  sftp: { host: string; port: number } | null;
 }
 
 export interface PanelOverview {
