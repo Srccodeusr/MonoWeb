@@ -16,11 +16,14 @@ export function bodyHash(body: Buffer): string {
 }
 
 /** Canonical string both sides sign. Includes the query string and a hash of the raw body bytes. */
-export function canonical(ts: string, nonce: string, method: string, pathWithQuery: string, body: Buffer): string {
-  return `${ts}\n${nonce}\n${method.toUpperCase()}\n${pathWithQuery}\n${bodyHash(body)}`;
+/** Marker used instead of a body hash on streaming routes (the route itself verifies a checksum carried in the SIGNED query string). */
+export const UNSIGNED_PAYLOAD = 'UNSIGNED-PAYLOAD';
+
+export function canonical(ts: string, nonce: string, method: string, pathWithQuery: string, body: Buffer | typeof UNSIGNED_PAYLOAD): string {
+  return `${ts}\n${nonce}\n${method.toUpperCase()}\n${pathWithQuery}\n${body === UNSIGNED_PAYLOAD ? UNSIGNED_PAYLOAD : bodyHash(body)}`;
 }
 
-export function sign(secret: string, ts: string, nonce: string, method: string, pathWithQuery: string, body: Buffer): string {
+export function sign(secret: string, ts: string, nonce: string, method: string, pathWithQuery: string, body: Buffer | typeof UNSIGNED_PAYLOAD): string {
   return crypto.createHmac('sha256', secret).update(canonical(ts, nonce, method, pathWithQuery, body)).digest('hex');
 }
 
@@ -46,7 +49,7 @@ export function preAuth(req: IncomingMessage): void {
 }
 
 /** Cheap checks run BEFORE the body is read, so unauthenticated clients cannot make us buffer large uploads. */
-export function authenticate(req: IncomingMessage, body: Buffer): void {
+export function authenticate(req: IncomingMessage, body: Buffer | typeof UNSIGNED_PAYLOAD): void {
   preAuth(req);
   const ts = String(req.headers['x-mono-ts']);
   const nonce = String(req.headers['x-mono-nonce']);

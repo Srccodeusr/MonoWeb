@@ -3,7 +3,7 @@ import path from 'path';
 import crypto from 'crypto';
 
 /**
- * Usage: npm run configure -- --panel https://panel.example.com --key <secret> [--port 3002] [--allow 1.2.3.4]
+ * Usage: npm run configure -- --panel https://panel.example.com --key <secret> [--port 3002] [--allow 1.2.3.4] [--sftp 2022]
  * Mirrors the AirLink "Configure node" flow: the panel shows this exact command after you add the node.
  * The secret is written to .env with mode 600 (never echoed back).
  */
@@ -30,6 +30,7 @@ async function main(): Promise<void> {
   let out = set(existing, 'DAEMON_SECRET', key);
   const port = arg('port'); if (port) out = set(out, 'DAEMON_PORT', port);
   const allow = arg('allow'); if (allow) out = set(out, 'ALLOWED_IPS', allow);
+  const sftp = arg('sftp'); if (sftp) out = set(out, 'SFTP_PORT', sftp);
   fs.writeFileSync(file, out, { mode: 0o600 });
   console.log(`Wrote ${file} (fingerprint ${crypto.createHash('sha256').update(key).digest('hex').slice(0, 8)}). Start the daemon with: npm start`);
 }

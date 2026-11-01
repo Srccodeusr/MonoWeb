@@ -11,6 +11,8 @@ import * as store from './state';
 import * as fsops from './fsops';
 import * as backup from './backup';
 import { safeDownload } from './download';
+import * as transfer from './transfer';
+import * as addons from './addons';
 
 const num = (v: unknown, min: number, max: number, def: number): number => {
   const n = Number(v);
@@ -30,7 +32,17 @@ function buildSpec(id: string, b: any, prev?: ServerSpec | null): ServerSpec {
   const startup = typeof b?.startup === 'string' ? b.startup : prev?.startup || '';
   if (startup.length > 4096 || startup.includes('\0')) throw new HttpError(400, 'Invalid startup command');
   const stopCommand = typeof b?.stopCommand === 'string' ? b.stopCommand.slice(0, 128) : prev?.stopCommand ?? 'stop';
-  return { id, image, startup, stopCommand, env: b?.env !== undefined ? validateEnv(b.env) : prev?.env || {}, ports: b?.ports !== undefined ? validatePorts(b.ports) : prev?.ports || [], limits };
+  const sftp = b?.sftp !== undefined ? validateSftp(b.sftp) : prev?.sftp || [];
+  return { id, image, startup, stopCommand, env: b?.env !== undefined ? validateEnv(b.env) : prev?.env || {}, ports: b?.ports !== undefined ? validatePorts(b.ports) : prev?.ports || [], limits, sftp };
+}
+
+function validateSftp(v: unknown): NonNullable<ServerSpec['sftp']> {
+  if (!Array.isArray(v) || v.length > 32) throw new HttpError(400, 'Invalid sftp list');
+  return v.map(c => {
+    if (typeof c?.username !== 'string' || !/^[A-Za-z0-9._-]{1,64}\.[a-f0-9]{8}$/.test(c.username)) throw new HttpError(400, 'Invalid sftp username');
+    if (typeof c?.hash !== 'string' || !/^scrypt\$\d+\$\d+\$\d+\$[A-Za-z0-9+/=]+\$[A-Za-z0-9+/=]+$/.test(c.hash)) throw new HttpError(400, 'Invalid sftp hash');
+    return { username: c.username, hash: c.hash, readOnly: !!c.readOnly };
+  });
 }
 
 function needSpec(id: string): ServerSpec {
@@ -135,6 +147,7 @@ export function registerRoutes(): void {
       diskExceeded.delete(id);
       if (!spec.startup.trim()) throw new HttpError(400, 'No startup command configured');
     }
+    if (action === 'start' && (await rt.state(id)).state === 'running') return { ok: true, action, already: true }; // idempotent: never restarts a running server by accident
     if (action === 'stop' || action === 'restart') await rt.stop(spec);
     if (action === 'kill') await rt.kill(id);
     if (action === 'start' || action === 'restart') await rt.start(spec, fsops.ensureVolume(id));
@@ -190,6 +203,33 @@ export function registerRoutes(): void {
     res.writeHead(200, { 'Content-Type': 'application/octet-stream', 'Content-Length': size, 'Content-Disposition': `attachment; filename="${path.basename(p).replace(/["\r\n]/g, '_')}"`, 'X-Content-Type-Options': 'nosniff' });
     fs.createReadStream(p).pipe(res);
   });
+
+  // ---- addons ----------------------------------------------------------------------------------
+  route('POST', '/v1/servers/:id/addon/install', async ({ params, body }) => {
+    const id = assertId(params.id); const spec = needSpec(id);
+    const paths = await addons.installFiles(id, body.files, spec.limits.diskMB);
+    return { ok: true, paths };
+  });
+  route('POST', '/v1/servers/:id/addon/remove', ({ params, body }) => { const id = assertId(params.id); needSpec(id); return { ok: true, removed: addons.removePaths(id, body.paths) }; });
+
+  // ---- node-to-node transfer -------------------------------------------------------------------
+  route('POST', '/v1/servers/:id/transfer/prepare', async ({ params }) => {
+    const id = assertId(params.id); needSpec(id);
+    if ((await (await getRuntime()).state(id)).state !== 'offline') throw new HttpError(409, 'Stop the server before transferring it');
+    return transfer.prepareExport(id);
+  });
+  route('GET', '/v1/servers/:id/transfer/:fileId', ({ params, res }) => {
+    assertId(params.id);
+    const { stream, size } = transfer.exportStream(params.fileId);
+    res.writeHead(200, { 'Content-Type': 'application/gzip', 'Content-Length': size });
+    stream.pipe(res);
+  });
+  route('DELETE', '/v1/servers/:id/transfer/:fileId', ({ params }) => { assertId(params.id); transfer.deleteExport(params.fileId); return { ok: true }; });
+  route('PUT', '/v1/servers/:id/transfer', async ({ params, query, req }) => {
+    const id = assertId(params.id); needSpec(id);
+    await transfer.importArchive(id, req, String(query.get('sha256') || ''), Number(query.get('size')));
+    return { ok: true };
+  }, 0, { stream: true });
 
   // ---- backups ---------------------------------------------------------------------------------
   route('POST', '/v1/servers/:id/backups', async ({ params, body }) => backup.createBackup(assertId(params.id), num(body.maxBytes, 0, Number.MAX_SAFE_INTEGER, 0)));

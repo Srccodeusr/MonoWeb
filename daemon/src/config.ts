@@ -46,7 +46,10 @@ export const config = {
   gid: int('CONTAINER_GID', 1000),
   imagePrefixes: env('ALLOWED_IMAGE_PREFIXES').split(',').map(s => s.trim()).filter(Boolean),
   allowPrivateDownloads: env('ALLOW_PRIVATE_DOWNLOADS') === 'true',
-  version: '3.0.0',
+  sftpPort: int('SFTP_PORT', 0),               // 0 = SFTP disabled
+  sftpHostKey: env('SFTP_HOST_KEY', path.join(dataDir, 'sftp_host_key.pem')),
+  maxTransferMB: int('MAX_TRANSFER_MB', 20480),
+  version: '3.1.0',
 };
 
 const WEAK = new Set(['', 'key', 'changeme', 'change_me', '00000000000000000000000000000000', 'secret', 'password']);

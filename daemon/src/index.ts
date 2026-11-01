@@ -3,6 +3,8 @@ import { startHttp } from './http';
 import { registerRoutes, startWatchdogs } from './app';
 import { getRuntime } from './runtime';
 import { log } from './log';
+import { startSftp } from './sftp';
+import { sweepOldTransfers } from './transfer';
 
 async function main(): Promise<void> {
   assertConfig();
@@ -16,6 +18,8 @@ async function main(): Promise<void> {
   }
   registerRoutes();
   startWatchdogs();
+  sweepOldTransfers(); setInterval(sweepOldTransfers, 3600_000).unref();
+  startSftp();
   const server = startHttp();
   const shutdown = (sig: string) => { log.info(`${sig} received, shutting down`); server.close(() => process.exit(0)); setTimeout(() => process.exit(0), 5000).unref(); };
   process.on('SIGTERM', () => shutdown('SIGTERM'));

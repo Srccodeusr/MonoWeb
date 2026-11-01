@@ -119,6 +119,12 @@ export function filePath(id: string, rel: string): { p: string; size: number } {
   return { p, size: st.size };
 }
 
+export function chownTree(dir: string): Promise<void> {
+  // Files extracted/downloaded by a root daemon must belong to the container user or the server cannot write to them.
+  if (process.getuid?.() !== 0) return Promise.resolve();
+  return run('chown', ['-R', `${config.uid}:${config.gid}`, dir]).then(() => undefined, () => undefined);
+}
+
 function chownMaybe(p: string): void {
   try { if (process.getuid?.() === 0) fs.chownSync(p, config.uid, config.gid); } catch { /* ignore */ }
 }
