@@ -1,6 +1,6 @@
 {
   "name": "mononode-daemon",
-  "version": "3.0.0",
+  "version": "3.1.0",
   "description": "MonoNode node daemon: lightweight, zero-dependency server runner for Docker, Podman, gVisor/Kata or a native process sandbox",
   "private": true,
   "type": "commonjs",
@@ -14,6 +14,9 @@
     "dev": "tsc -p tsconfig.json && node dist/index.js",
     "configure": "node dist/configure.js",
     "test": "sh test/run.sh"
+  },
+  "optionalDependencies": {
+    "ssh2": "^1.16.0"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",
