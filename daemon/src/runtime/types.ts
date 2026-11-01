@@ -10,6 +10,8 @@ export interface ServerSpec {
   env: Record<string, string>;
   ports: PortMap[];
   limits: Limits;
+  /** SFTP logins allowed for this server (password hashes only). */
+  sftp?: { username: string; hash: string; readOnly: boolean }[];
 }
 
 export interface PowerState { state: 'running' | 'offline' | 'starting'; startedAt?: string; exitCode?: number }
