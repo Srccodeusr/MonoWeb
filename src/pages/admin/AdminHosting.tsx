@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { Server, Network, Users, DollarSign, Coins, Megaphone, CheckCircle2, Circle, ArrowRight, AlertTriangle, Layers } from 'lucide-react';
+import { Server, Network, Users, DollarSign, Coins, Megaphone, CheckCircle2, Circle, ArrowRight, AlertTriangle, Layers, Database, Download } from 'lucide-react';
 import { apiRequest } from '../../lib/api';
-import { Badge, Btn, Card, PageHeader, Spinner, money } from '../../components/ui/kit';
+import { Badge, Btn, Card, PageHeader, Spinner, fmtBytes, fmtDate, money, useToast } from '../../components/ui/kit';
 
 interface Stats { nodes: { total: number; online: number }; servers: { total: number; byStatus: Record<string, number>; expiringSoon: number }; users: { total: number; premium: number }; revenue: { total: number; last30: number; pending: number }; economy: { coinsInCirculation: number; purchases30: number }; ads: { active: number; impressions: number; clicks: number } }
 
@@ -11,6 +11,31 @@ const Tile: React.FC<{ icon: any; label: string; value: React.ReactNode; sub?: R
     <p className="text-2xl font-extrabold text-white mt-2">{value}</p>{sub && <p className="text-[11px] text-zinc-500 mt-1">{sub}</p>}
   </button>
 );
+
+interface DbInfo { file: string; sizeBytes: number; engine: string; rows: Record<string, number>; backups: { name: string; size: number; createdAt: string }[] }
+
+const DatabaseCard: React.FC = () => {
+  const [toast, say] = useToast();
+  const [d, setD] = useState<DbInfo | null>(null); const [busy, setBusy] = useState(false);
+  const load = async () => { const r = await apiRequest<DbInfo>('/admin/hosting/database'); if (r.success && r.data) setD(r.data); };
+  useEffect(() => { load(); }, []);
+  if (!d) return null;
+  const backup = async () => { setBusy(true); const r = await apiRequest('/admin/hosting/database/backup', { method: 'POST' }); setBusy(false); say(r.success ? 'success' : 'error', r.success ? `Backup created: ${r.data.name}` : r.error?.message || 'Backup failed'); load(); };
+  const download = async (name: string) => {
+    const res = await fetch(`/api/v1/admin/hosting/database/backups/${encodeURIComponent(name)}`, { headers: { Authorization: `Bearer ${localStorage.getItem('aether_token') || ''}` } });
+    if (!res.ok) return say('error', 'Download failed');
+    const url = URL.createObjectURL(await res.blob()); const a = document.createElement('a'); a.href = url; a.download = name; a.click(); URL.revokeObjectURL(url);
+  };
+  const total = (Object.values(d.rows) as number[]).reduce((a, b) => a + b, 0);
+  return (
+    <Card className="space-y-3">
+      {toast}
+      <div className="flex flex-wrap items-center justify-between gap-2"><h2 className="text-sm font-bold text-white flex items-center gap-2"><Database className="h-4 w-4 text-amber-400" />Database</h2><Btn size="sm" variant="primary" busy={busy} onClick={backup}>Back up now</Btn></div>
+      <p className="text-xs text-zinc-400"><b className="text-zinc-200">{d.engine}</b> · {d.file} · {fmtBytes(d.sizeBytes)} · {total.toLocaleString()} records. Backups are consistent snapshots taken while the site is running and are stored in <code className="text-zinc-300">data/backups</code>.</p>
+      {d.backups.length > 0 && <ul className="divide-y divide-zinc-800 rounded-xl border border-zinc-800 text-xs">{d.backups.slice(0, 5).map(b => <li key={b.name} className="flex items-center justify-between gap-2 px-3 py-2"><span className="min-w-0 truncate text-zinc-300">{b.name}<span className="text-zinc-600"> · {fmtBytes(b.size)} · {fmtDate(b.createdAt)}</span></span><button onClick={() => download(b.name)} className="text-amber-300 flex items-center gap-1 shrink-0"><Download className="h-3 w-3" />Download</button></li>)}</ul>}
+    </Card>
+  );
+};
 
 export const AdminHosting: React.FC<{ onNavigate: (p: string, params?: any) => void }> = ({ onNavigate }) => {
   const [s, setS] = useState<Stats | null>(null);
@@ -50,7 +75,8 @@ export const AdminHosting: React.FC<{ onNavigate: (p: string, params?: any) => v
         <Tile icon={Megaphone} label="Ads" value={s.ads.active} sub={`${s.ads.impressions.toLocaleString()} views · ${s.ads.clicks.toLocaleString()} clicks`} onClick={() => onNavigate('admin-ads')} />
       </div>
       {s.servers.expiringSoon > 0 && <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-xs text-amber-200 flex items-center gap-2"><AlertTriangle className="h-4 w-4" />{s.servers.expiringSoon} server(s) expire within 24 hours. Expired servers are deleted automatically 24 hours later.<Badge tone="amber" className="ml-auto">auto</Badge></div>}
-      <Card className="flex flex-wrap gap-2">{[['admin-hosting-settings', 'Expiry & renewals'], ['admin-hosting-plans', 'Plans & limits'], ['admin-store', 'Store & economy'], ['admin-ads', 'Ad Center'], ['admin-stripe', 'Stripe setup']].map(([p, l]) => <Btn key={p} onClick={() => onNavigate(p)}>{l}</Btn>)}</Card>
+      <DatabaseCard />
+      <Card className="flex flex-wrap gap-2">{[['admin-hosting-settings', 'Expiry & renewals'], ['admin-hosting-plans', 'Plans & limits'], ['admin-store', 'Store & economy'], ['admin-ads', 'Ad Center'], ['admin-addons', 'Addon Store'], ['admin-stripe', 'Stripe setup']].map(([p, l]) => <Btn key={p} onClick={() => onNavigate(p)}>{l}</Btn>)}</Card>
     </div>
   );
 };

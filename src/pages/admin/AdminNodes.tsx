@@ -3,9 +3,9 @@ import { Network, Plus, RefreshCw, Trash2, Pencil, Copy, KeyRound, Wifi, Cpu, Me
 import { apiRequest } from '../../lib/api';
 import { Badge, Btn, Card, Empty, Field, Modal, NumInput, PageHeader, Select, Spinner, TextInput, Toggle, fmtBytes, fmtMB, useToast } from '../../components/ui/kit';
 
-interface Node { id: string; name: string; locationName: string; locationFlag?: string; fqdn: string; daemonHost: string; daemonPort: number; scheme: 'http' | 'https'; ramMB: number; cpuPercent: number; diskMB: number; overallocatePercent: number; maxServers: number; portMin: number; portMax: number; isPublic: boolean; isMaintenance: boolean; premiumOnly: boolean; notes?: string; status: { online: boolean; runtime?: string; version?: string; platform?: string; error?: string; checkedAt?: string; runtimeInfo?: any; system?: { cpus: number; load: number[]; memTotal: number; memFree: number; diskFree: number; diskTotal: number } }; usage: { ramMB: number; cpuPercent: number; diskMB: number; servers: number } }
+interface Node { id: string; name: string; locationName: string; locationFlag?: string; fqdn: string; daemonHost: string; daemonPort: number; sftpPort: number; scheme: 'http' | 'https'; ramMB: number; cpuPercent: number; diskMB: number; overallocatePercent: number; maxServers: number; portMin: number; portMax: number; isPublic: boolean; isMaintenance: boolean; premiumOnly: boolean; notes?: string; status: { online: boolean; runtime?: string; version?: string; platform?: string; error?: string; checkedAt?: string; runtimeInfo?: any; system?: { cpus: number; load: number[]; memTotal: number; memFree: number; diskFree: number; diskTotal: number } }; usage: { ramMB: number; cpuPercent: number; diskMB: number; servers: number } }
 
-const blank = { name: '', locationName: '', locationFlag: '', fqdn: '', daemonHost: '', daemonPort: 3002, scheme: 'http', ramMB: 8192, cpuPercent: 400, diskMB: 102400, overallocatePercent: 0, maxServers: 0, portMin: 20000, portMax: 40000, isPublic: true, isMaintenance: false, premiumOnly: false, notes: '' };
+const blank = { name: '', locationName: '', locationFlag: '', fqdn: '', daemonHost: '', daemonPort: 3002, sftpPort: 0, scheme: 'http', ramMB: 8192, cpuPercent: 400, diskMB: 102400, overallocatePercent: 0, maxServers: 0, portMin: 20000, portMax: 40000, isPublic: true, isMaintenance: false, premiumOnly: false, notes: '' };
 const RUNTIME_LABEL: Record<string, string> = { docker: 'Docker', podman: 'Podman', process: 'Native sandbox' };
 
 export const AdminNodes: React.FC = () => {
@@ -79,6 +79,7 @@ export const AdminNodes: React.FC = () => {
               <Field label="Public address (FQDN / IP)" hint="What customers connect to."><TextInput value={form.fqdn} onChange={e => set('fqdn', e.target.value)} placeholder="de1.example.com" /></Field>
               <Field label="Daemon address" hint="What the panel calls. Leave empty to use the public address."><TextInput value={form.daemonHost || ''} onChange={e => set('daemonHost', e.target.value)} placeholder="same as public" /></Field>
               <Field label="Daemon port"><NumInput value={form.daemonPort} onChange={v => set('daemonPort', v)} min={1} max={65535} /></Field>
+              <Field label="SFTP port" hint="0 = SFTP off on this node. Customers connect here (e.g. 2022); open it in the firewall."><NumInput value={form.sftpPort} onChange={v => set('sftpPort', v)} min={0} max={65535} /></Field>
               <Field label="Daemon protocol"><Select value={form.scheme} onChange={e => set('scheme', e.target.value)}><option value="http">HTTP (use only on a private network / behind a tunnel)</option><option value="https">HTTPS (recommended)</option></Select></Field>
             </div>
             <div className="grid sm:grid-cols-3 gap-3">
