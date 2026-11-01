@@ -6,7 +6,7 @@ import { Badge, Btn, Card, Empty, Spinner, fmtMB, statusTone, timeLeft } from '.
 import { useAuth } from '../../lib/AuthContext';
 import { useBranding } from '../../lib/BrandingContext';
 
-const STATUS_LABEL: Record<string, string> = { running: 'Running', offline: 'Offline', installing: 'Installing', starting: 'Starting', suspended: 'Suspended', expired: 'Expired', install_failed: 'Install failed' };
+const STATUS_LABEL: Record<string, string> = { transferring: 'Moving', running: 'Running', offline: 'Offline', installing: 'Installing', starting: 'Starting', suspended: 'Suspended', expired: 'Expired', install_failed: 'Install failed' };
 
 const ServerCard: React.FC<{ s: PanelServer; onOpen: () => void }> = ({ s, onOpen }) => {
   const tl = timeLeft(s.expiresAt);
@@ -15,7 +15,7 @@ const ServerCard: React.FC<{ s: PanelServer; onOpen: () => void }> = ({ s, onOpe
     <button onClick={onOpen} className={`group text-left w-full rounded-2xl border bg-zinc-900/60 hover:bg-zinc-900 transition-colors p-4 ${expired ? 'border-red-500/30' : 'border-zinc-800 hover:border-zinc-700'}`}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-sm font-bold text-white truncate">{s.name}</p>
+          <p className="text-sm font-bold text-white truncate flex items-center gap-1.5">{s.name}{s.role === 'subuser' && <Badge tone="blue">Shared</Badge>}</p>
           <p className="text-[11px] text-zinc-500 truncate mt-0.5">{s.description || s.image?.software || 'No description'}</p>
         </div>
         <Badge tone={statusTone(s.status)}>{s.status === 'running' && <span className="mr-1 h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />}{STATUS_LABEL[s.status] || s.status}</Badge>
