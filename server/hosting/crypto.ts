@@ -76,3 +76,18 @@ export function newId(prefix: string): string {
 
 /** Daemon-side server id: lowercase uuid, matches the daemon's id regex. */
 export function newServerId(): string { return crypto.randomUUID(); }
+
+/** scrypt hash for SFTP passwords. Same format the daemon verifies: scrypt$N$r$p$saltB64$hashB64. */
+export function hashSftpPassword(password: string): string {
+  const salt = crypto.randomBytes(16);
+  const h = crypto.scryptSync(password, salt, 32, { N: 16384, r: 8, p: 1 });
+  return `scrypt$16384$8$1$${salt.toString('base64')}$${h.toString('base64')}`;
+}
+
+/** Readable but strong: 24 chars from an unambiguous alphabet. */
+export function randomPassword(len = 24): string {
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
+  const bytes = crypto.randomBytes(len);
+  let out = ''; for (let i = 0; i < len; i++) out += alphabet[bytes[i] % alphabet.length];
+  return out;
+}

@@ -3,6 +3,7 @@ import { User } from '../../src/types';
 import { HostImage, HostNode, HostServer, HostingPlan, PerServerLimits, Entitlement } from '../../src/hostingTypes';
 import { daemon, DaemonError, pingNode } from './daemonClient';
 import { effectivePlan } from './plans';
+import { resolveAccess, can } from './access';
 import { evaluateServer, extendFrom } from './lifecycle';
 import { newServerId } from './crypto';
 
@@ -64,7 +65,7 @@ export function nodeUsage(db: DatabaseSchema, nodeId: string) {
   return list.reduce((a, s) => { const l = liveLimits(s); return { ramMB: a.ramMB + l.ramMB, cpuPercent: a.cpuPercent + l.cpuPercent, diskMB: a.diskMB + l.diskMB, servers: a.servers + 1 }; }, { ramMB: 0, cpuPercent: 0, diskMB: 0, servers: 0 });
 }
 
-function fits(db: DatabaseSchema, node: HostNode, need: { ramMB: number; cpuPercent: number; diskMB: number }): boolean {
+export function fits(db: DatabaseSchema, node: HostNode, need: { ramMB: number; cpuPercent: number; diskMB: number }): boolean {
   const u = nodeUsage(db, node.id), f = 1 + node.overallocatePercent / 100;
   if (node.maxServers && u.servers >= node.maxServers) return false;
   return (!node.ramMB || u.ramMB + need.ramMB <= node.ramMB * f)
@@ -91,6 +92,14 @@ export function selectableNodes(db: DatabaseSchema, image: HostImage, plan: Host
     && (!n.premiumOnly || !plan.isFree)
     && (image.runtime !== 'container' || n.status.runtime !== 'process')
     && (image.runtime !== 'process' || n.status.runtime === 'process'));
+}
+
+/** Host ports -> port mappings. Container images keep their fixed in-container port; 'any' images listen on the host port itself. */
+export function buildPorts(img: HostImage, hostPorts: number[]): HostServer['ports'] {
+  return hostPorts.map((host, i) => {
+    const def = img.ports[i];
+    return { host, container: img.runtime === 'container' && def ? def.container : host, proto: def?.proto || 'tcp', label: def?.label || 'Extra' };
+  });
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -128,6 +137,21 @@ export function nodeFor(db: DatabaseSchema, s: HostServer): HostNode {
   return n!;
 }
 
+/** SFTP logins the node should accept for this server right now (plan feature, permission and server state all apply). */
+export function sftpLogins(db: DatabaseSchema, s: HostServer): { username: string; hash: string; readOnly: boolean }[] {
+  if (['suspended', 'expired', 'transferring'].includes(s.status)) return [];
+  const owner = db.users.find(u => u.id === s.ownerId);
+  if (!owner || !effectivePlan(owner, db.hostingPlans, db.settings.hosting!)?.features.sftp) return [];
+  if (!db.nodes.find(n => n.id === s.nodeId)?.sftpPort) return [];
+  const out: { username: string; hash: string; readOnly: boolean }[] = [];
+  for (const c of db.sftpCreds.filter(x => x.serverId === s.id)) {
+    const acc = resolveAccess(db, c.userId, s.id);
+    if (!acc || !can(acc, 'sftp')) continue;
+    out.push({ username: c.username, hash: c.passwordHash, readOnly: c.readOnly || !can(acc, 'files.write') });
+  }
+  return out;
+}
+
 export function specFor(db: DatabaseSchema, s: HostServer) {
   const image = db.images.find(i => i.id === s.imageId);
   const l = liveLimits(s);
@@ -136,6 +160,7 @@ export function specFor(db: DatabaseSchema, s: HostServer) {
     image: s.dockerImage, startup: renderStartup(image?.startup || '', env), stopCommand: image?.stopCommand || 'stop', env,
     ports: s.ports.map(p => ({ host: p.host, container: p.container, proto: p.proto })),
     limits: { ramMB: l.ramMB, cpuPercent: l.cpuPercent, diskMB: l.diskMB, swapMB: l.swapMB, pids: l.pids },
+    sftp: sftpLogins(db, s),
   };
 }
 
@@ -200,10 +225,7 @@ export async function createServer(user: User, input: CreateInput): Promise<Host
   const portCount = Math.max(1, img.ports.length) + (ent ? 0 : caps.perServer.ports);
   const hostPorts = freePorts(db, n, portCount);
   if (!hostPorts) fail(503, 'NO_PORTS', 'This node has no free ports.');
-  const ports: HostServer['ports'] = hostPorts!.map((host, i) => {
-    const def = img.ports[i];
-    return { host, container: img.runtime === 'container' && def ? def.container : host, proto: def?.proto || 'tcp', label: def?.label || 'Extra' };
-  });
+  const ports: HostServer['ports'] = buildPorts(img, hostPorts!);
 
   const label = input.dockerImageLabel && img.dockerImages[input.dockerImageLabel] ? input.dockerImageLabel : img.defaultImage;
   const variables = validateVars(img, input.variables as any, false);
@@ -246,7 +268,7 @@ export async function createServer(user: User, input: CreateInput): Promise<Host
 const stateCache = new Map<string, { at: number; value: any }>();
 
 export async function liveState(db: DatabaseSchema, s: HostServer): Promise<{ status: HostServer['status']; startedAt?: string; installLog?: string[] }> {
-  if (s.status === 'suspended' || s.status === 'expired') return { status: s.status };
+  if (s.status === 'suspended' || s.status === 'expired' || s.status === 'transferring') return { status: s.status };
   const hit = stateCache.get(s.id);
   if (hit && Date.now() - hit.at < 4000) return hit.value;
   let value: { status: HostServer['status']; startedAt?: string; installLog?: string[] };
@@ -312,10 +334,12 @@ export async function lifecycleTick(): Promise<void> {
     const reminderH = db.settings.hosting?.expiry.reminderHours ?? 24;
     for (const s of [...db.servers]) {
       try {
+        if (s.status === 'transferring') continue; // the transfer job owns this server until it finishes
         const action = evaluateServer(s, now, reminderH);
         if (action === 'expire') {
           s.status = 'expired'; s.expiredAt = new Date(now).toISOString(); saveDbSync();
           await stopQuietly(db, s);
+          await pushSpec(db, s).catch(() => undefined); // revokes SFTP logins on the node
           mailUser(db, s.ownerId, `Server "${s.name}" has expired`, `Your server "${s.name}" expired and was stopped. Renew it within 24 hours or it will be permanently deleted.`);
         } else if (action === 'delete') {
           await destroyServer(db, s);

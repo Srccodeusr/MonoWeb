@@ -1,4 +1,4 @@
-import { HostImage, HostNode, StoreItem } from '../../src/hostingTypes';
+import { Addon, HostImage, HostNode, StoreItem } from '../../src/hostingTypes';
 
 const s = (v: any, max: number, def = '') => (typeof v === 'string' ? v.trim().slice(0, max) : def);
 const n = (v: any, min: number, max: number, def: number) => { const x = Number(v); return Number.isFinite(x) ? Math.min(max, Math.max(min, x)) : def; };
@@ -15,7 +15,7 @@ export function sanitizeNode(i: any, e?: HostNode): Omit<HostNode, 'id' | 'secre
   if (portMin >= portMax) throw new Error('Port range start must be below its end.');
   return {
     name, locationName: s(i?.locationName, 60, e?.locationName) || 'Unknown', locationFlag: s(i?.locationFlag, 8, e?.locationFlag),
-    fqdn, daemonHost, daemonPort: Math.round(n(i?.daemonPort, 1, 65535, e?.daemonPort ?? 3002)), scheme: i?.scheme === 'https' ? 'https' : i?.scheme === 'http' ? 'http' : e?.scheme || 'http',
+    fqdn, daemonHost, daemonPort: Math.round(n(i?.daemonPort, 1, 65535, e?.daemonPort ?? 3002)), sftpPort: Math.round(n(i?.sftpPort, 0, 65535, e?.sftpPort ?? 0)), scheme: i?.scheme === 'https' ? 'https' : i?.scheme === 'http' ? 'http' : e?.scheme || 'http',
     ramMB: Math.round(n(i?.ramMB, 0, 1e9, e?.ramMB ?? 4096)), cpuPercent: Math.round(n(i?.cpuPercent, 0, 1e6, e?.cpuPercent ?? 400)), diskMB: Math.round(n(i?.diskMB, 0, 1e9, e?.diskMB ?? 51200)),
     overallocatePercent: Math.round(n(i?.overallocatePercent, 0, 500, e?.overallocatePercent ?? 0)), maxServers: Math.round(n(i?.maxServers, 0, 100000, e?.maxServers ?? 0)),
     portMin, portMax, isPublic: b(i?.isPublic, e?.isPublic ?? true), isMaintenance: b(i?.isMaintenance, e?.isMaintenance ?? false), premiumOnly: b(i?.premiumOnly, e?.premiumOnly ?? false), notes: s(i?.notes, 500, e?.notes),
@@ -68,4 +68,25 @@ export function sanitizeStoreItem(i: any, e?: StoreItem): Omit<StoreItem, 'id' |
   if (type === 'slot') out.slots = Math.round(n(i?.slots ?? e?.slots, 1, 100, 1));
   if (type === 'server_pack') { const p = i?.pack || e?.pack; out.pack = { ramMB: Math.round(n(p?.ramMB, 64, 1e6, 2048)), cpuPercent: Math.round(n(p?.cpuPercent, 5, 6400, 150)), diskMB: Math.round(n(p?.diskMB, 64, 1e8, 4096)), swapMB: Math.round(n(p?.swapMB, 0, 1e6, 0)), backups: Math.round(n(p?.backups, 0, 100, 0)), databases: Math.round(n(p?.databases, 0, 100, 0)), validityDays: Math.round(n(p?.validityDays, 1, 3650, 30)) }; }
   return out;
+}
+
+export function sanitizeAddon(i: any, imageIds: string[], e?: Addon): Omit<Addon, 'id' | 'installs' | 'createdAt' | 'updatedAt'> {
+  const name = s(i?.name, 80, e?.name); if (!name) throw new Error('Addon name is required.');
+  const files = (Array.isArray(i?.files) ? i.files : e?.files || []).slice(0, 20).map((f: any) => {
+    const url = s(f?.url, 1000); const p = s(f?.path, 200);
+    if (!/^https?:\/\/[^\s]+$/.test(url)) throw new Error('Every file needs an http(s) download URL.');
+    if (!p.startsWith('/') || p.includes('..') || p.includes('\0') || p.endsWith('/')) throw new Error(`Invalid target path "${p}". Use an absolute file path like /plugins/name.jar (no "..").`);
+    return { url, path: p, extract: !!f?.extract };
+  });
+  if (!files.length) throw new Error('Add at least one file for the addon to install.');
+  const cmd = s(i?.postCommand ?? e?.postCommand, 200);
+  if (/[\r\n\0]/.test(cmd)) throw new Error('The post-install command must be a single line.');
+  return {
+    name, slug: (s(i?.slug, 60, e?.slug) || name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60) || 'addon',
+    description: s(i?.description, 500, e?.description), iconUrl: safeUrl(i?.iconUrl ?? e?.iconUrl), category: s(i?.category, 40, e?.category) || 'Other', author: s(i?.author, 60, e?.author) || 'Unknown',
+    version: s(i?.version, 24, e?.version) || '1.0.0', priceCoins: Math.round(n(i?.priceCoins, 0, 1e9, e?.priceCoins ?? 0)), priceMoney: n(i?.priceMoney, 0, 1e6, e?.priceMoney ?? 0),
+    isActive: b(i?.isActive, e?.isActive ?? true), featured: b(i?.featured, e?.featured ?? false),
+    compatibleImageIds: (Array.isArray(i?.compatibleImageIds) ? i.compatibleImageIds : e?.compatibleImageIds || []).filter((x: string) => imageIds.includes(x)),
+    files, postCommand: cmd || undefined, restartAfter: b(i?.restartAfter, e?.restartAfter ?? false),
+  };
 }

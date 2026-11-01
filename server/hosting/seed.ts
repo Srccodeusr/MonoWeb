@@ -1,4 +1,4 @@
-import { HostImage, StoreItem } from '../../src/hostingTypes';
+import { Addon, HostImage, StoreItem } from '../../src/hostingTypes';
 
 const now = () => new Date().toISOString();
 
@@ -95,5 +95,18 @@ export function defaultStoreItems(): StoreItem[] {
     { ...b, id: 'store_premium3', type: 'temp_premium', name: 'Premium for 3 days', description: 'Try Premium perks: no ads, bigger limits.', priceCoins: 500, sortOrder: 5, premiumPlanId: 'plan_premium', premiumDays: 3 },
     { ...b, id: 'store_slot', type: 'slot', name: '+1 server slot', description: 'Permanently raise your server limit by one.', priceCoins: 1500, sortOrder: 6, slots: 1 },
     { ...b, id: 'store_pack', type: 'server_pack', name: 'Boosted server (2 GB, 30 days)', description: 'One extra server with better specs than your plan.', priceCoins: 2500, sortOrder: 7, pack: { ramMB: 2048, cpuPercent: 150, diskMB: 4096, swapMB: 0, backups: 2, databases: 1, validityDays: 30 } },
+  ];
+}
+
+/**
+ * Example addons. They ship DISABLED because they point at placeholder URLs: edit the file URLs in
+ * Admin > Addon Store, then enable them. (Real, version-pinned download links are yours to choose.)
+ */
+export function defaultAddons(): Addon[] {
+  const t = now();
+  const base = { iconUrl: '', author: 'MonoNode', version: '1.0.0', priceCoins: 0, priceMoney: 0, isActive: false, featured: false, restartAfter: false, installs: 0, createdAt: t, updatedAt: t };
+  return [
+    { ...base, id: 'addon_example_plugin', name: 'Example plugin (edit me)', slug: 'example-plugin', category: 'Plugins', description: 'Downloads a plugin jar into plugins/. Replace the URL with your own, then enable this addon.', compatibleImageIds: ['img_minecraft'], files: [{ url: 'https://example.com/plugin.jar', path: '/plugins/plugin.jar', extract: false }], postCommand: 'reload', restartAfter: false },
+    { ...base, id: 'addon_example_template', name: 'Starter template (edit me)', slug: 'starter-template', category: 'Templates', description: 'Downloads and unpacks a zip archive of starter files into the server root.', compatibleImageIds: ['img_nodejs', 'img_python'], files: [{ url: 'https://example.com/starter.zip', path: '/starter.zip', extract: true }], restartAfter: true },
   ];
 }

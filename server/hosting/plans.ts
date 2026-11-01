@@ -21,7 +21,7 @@ export function periodEndDate(from: Date, period: BillingPeriod): Date {
   return d;
 }
 
-export interface UserPlanState { planId?: string; planExpiresAt?: string; tempPlan?: { planId: string; until: string } }
+export interface UserPlanState { hostingPlanId?: string; planId?: string; planExpiresAt?: string; tempPlan?: { planId: string; until: string } }
 
 /**
  * Which plan applies to the user right now:
@@ -33,8 +33,10 @@ export function effectivePlan(user: UserPlanState, plans: HostingPlan[], setting
     const t = byId(user.tempPlan.planId);
     if (t) return t;
   }
-  if (user.planId) {
-    const p = byId(user.planId);
+  // `hostingPlanId` is what purchases/admins set on the user record; `planId` is accepted for plain state objects.
+  const paidId = user.hostingPlanId ?? user.planId;
+  if (paidId) {
+    const p = byId(paidId);
     if (p && (p.isFree || !user.planExpiresAt || new Date(user.planExpiresAt).getTime() > now)) return p;
   }
   return byId(settings.freePlanId) || plans.find(p => p.isFree) || plans[0];
@@ -49,16 +51,16 @@ export function defaultPlans(now: string): HostingPlan[] {
     {
       ...base, id: 'plan_free', name: 'Free', tagline: 'Ad-supported 24/7 hosting', isFree: true, isPopular: false, sortOrder: 1,
       monthlyPrice: 0, serverLimit: 2,
-      perServer: { ramMB: 512, cpuPercent: 50, diskMB: 1024, swapMB: 0, backups: 0, databases: 0, ports: 0, pids: 256 },
-      features: { noAds: false, directRenewal: false, subusers: false, scheduledTasks: false, backups: false, chooseNode: false, switchNode: false, discordRole: false, giveaways: false },
+      perServer: { ramMB: 512, cpuPercent: 50, diskMB: 1024, swapMB: 0, backups: 0, databases: 0, ports: 0, pids: 256, subusers: 0, schedules: 0 },
+      features: { noAds: false, directRenewal: false, subusers: false, scheduledTasks: false, backups: false, chooseNode: false, switchNode: false, discordRole: false, giveaways: false, sftp: false },
       renewal: { validityDays: 7, methods: ['ads', 'blog'] },
       highlights: ['2 servers', '512 MB RAM per server', '1 GB storage', 'Renew by watching an ad or reading a blog'],
     },
     {
       ...base, id: 'plan_premium', name: 'Premium', tagline: 'More servers, more power, no ads', isFree: false, isPopular: true, sortOrder: 2,
       monthlyPrice: 2.5, serverLimit: 4,
-      perServer: { ramMB: 1024, cpuPercent: 100, diskMB: 1536, swapMB: 256, backups: 3, databases: 1, ports: 1, pids: 512 },
-      features: { noAds: true, directRenewal: true, subusers: true, scheduledTasks: true, backups: true, chooseNode: true, switchNode: true, discordRole: true, giveaways: true },
+      perServer: { ramMB: 1024, cpuPercent: 100, diskMB: 1536, swapMB: 256, backups: 3, databases: 1, ports: 1, pids: 512, subusers: 3, schedules: 5 },
+      features: { noAds: true, directRenewal: true, subusers: true, scheduledTasks: true, backups: true, chooseNode: true, switchNode: true, discordRole: true, giveaways: true, sftp: true },
       renewal: { validityDays: 0, methods: ['payment', 'coins'] },
       highlights: ['4 servers', '1 GB RAM per server', '1.5 GB storage', 'No ads, direct renewals, backups'],
     },
@@ -166,12 +168,13 @@ export function sanitizePlan(input: any, existing?: HostingPlan): Omit<HostingPl
       diskMB: Math.round(n(ps.diskMB, 64, 100000000, ep?.diskMB ?? 1024)), swapMB: Math.round(n(ps.swapMB, 0, 1048576, ep?.swapMB ?? 0)),
       backups: Math.round(n(ps.backups, 0, 1000, ep?.backups ?? 0)), databases: Math.round(n(ps.databases, 0, 100, ep?.databases ?? 0)),
       ports: Math.round(n(ps.ports, 0, 16, ep?.ports ?? 0)), pids: Math.round(n(ps.pids, 16, 4096, ep?.pids ?? 512)),
+      subusers: Math.round(n(ps.subusers, 0, 50, ep?.subusers ?? 0)), schedules: Math.round(n(ps.schedules, 0, 50, ep?.schedules ?? 0)),
     },
     accountCaps: { ramMB: Math.round(n(input?.accountCaps?.ramMB, 0, 1e9, e?.accountCaps.ramMB ?? 0)), cpuPercent: Math.round(n(input?.accountCaps?.cpuPercent, 0, 1e6, e?.accountCaps.cpuPercent ?? 0)), diskMB: Math.round(n(input?.accountCaps?.diskMB, 0, 1e9, e?.accountCaps.diskMB ?? 0)) },
     features: {
       noAds: b(f.noAds, ef?.noAds ?? false), directRenewal: b(f.directRenewal, ef?.directRenewal ?? false), subusers: b(f.subusers, ef?.subusers ?? false),
       scheduledTasks: b(f.scheduledTasks, ef?.scheduledTasks ?? false), backups: b(f.backups, ef?.backups ?? false), chooseNode: b(f.chooseNode, ef?.chooseNode ?? false),
-      switchNode: b(f.switchNode, ef?.switchNode ?? false), discordRole: b(f.discordRole, ef?.discordRole ?? false), giveaways: b(f.giveaways, ef?.giveaways ?? false),
+      switchNode: b(f.switchNode, ef?.switchNode ?? false), discordRole: b(f.discordRole, ef?.discordRole ?? false), giveaways: b(f.giveaways, ef?.giveaways ?? false), sftp: b(f.sftp, ef?.sftp ?? false),
     },
     renewal: { validityDays: Math.round(n(input?.renewal?.validityDays, 0, 3650, e?.renewal.validityDays ?? 7)), methods },
     highlights: (Array.isArray(input?.highlights) ? input.highlights : e?.highlights || []).slice(0, 12).map((h: any) => s(h, 120)).filter(Boolean),
