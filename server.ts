@@ -16,6 +16,8 @@ import discordRoutes from './server/routes/discord';
 import statusRoutes from './server/routes/status';
 import apiKeysRoutes from './server/routes/apiKeys';
 import hostingRoutes from './server/routes/hosting';
+import hostingExtraRoutes from './server/routes/hostingExtra';
+import { startScheduleRunner } from './server/hosting/schedules';
 import hostingAdminRoutes, { serveMedia } from './server/routes/hostingAdmin';
 import hostingBillingRoutes, { publicRouter as hostingPublicRoutes, stripeWebhook } from './server/routes/hostingBilling';
 import economyRoutes from './server/routes/economy';
@@ -159,6 +161,7 @@ async function startServer() {
   app.use('/api/v1/hosting-public', hostingPublicRoutes);
   app.use('/api/v1/hosting/billing', hostingBillingRoutes);
   app.use('/api/v1/hosting', hostingRoutes);
+  app.use('/api/v1/hosting', hostingExtraRoutes);
   app.use('/api/v1/economy', economyRoutes);
   app.use('/api/v1/admin/hosting', hostingAdminRoutes);
   app.use('/api/v1/admin', adminRoutes);
@@ -250,6 +253,7 @@ async function startServer() {
   const server = app.listen(PORT, '0.0.0.0', () => {
     console.log(`[Platform] Server running on http://0.0.0.0:${PORT}`);
     startHostingScheduler();
+    startScheduleRunner();
   });
 
   server.on('error', (err: any) => {
