@@ -27,24 +27,24 @@ export const TeamTab: React.FC<{ serverId: string; onUpgrade: () => void; notify
   const load = useCallback(async () => { const r = await apiRequest<Data>(`/hosting/servers/${serverId}/subusers`); if (r.success && r.data) setD(r.data); }, [serverId]);
   useEffect(() => { load(); }, [load]);
   if (!d) return <Spinner />;
-  if (!d.allowed) return <Locked title="Invite your team" text={`Give friends or teammates their own access to this server with fine-grained permissions. Team members are available on paid plans (you are on ${d.planName}).`} onUpgrade={onUpgrade} />;
+  if (!d.allowed) return <Locked title="Invite users" text={`Give friends or teammates their own access to this server with fine-grained permissions. Extra users are available on paid plans (you are on ${d.planName}).`} onUpgrade={onUpgrade} />;
 
   const save = async () => {
     if (!form) return; setBusy(true);
     const r = form.id ? await apiRequest(`/hosting/servers/${serverId}/subusers/${form.id}`, { method: 'PATCH', body: JSON.stringify({ permissions: form.permissions }) })
       : await apiRequest(`/hosting/servers/${serverId}/subusers`, { method: 'POST', body: JSON.stringify({ identifier: form.identifier, permissions: form.permissions }) });
     setBusy(false);
-    if (r.success) { notify('success', form.id ? 'Permissions updated' : 'Team member added'); setForm(null); load(); } else notify('error', r.error?.message || 'Failed');
+    if (r.success) { notify('success', form.id ? 'Permissions updated' : 'User added'); setForm(null); load(); } else notify('error', r.error?.message || 'Failed');
   };
   const remove = async (id: string, name: string) => { if (!window.confirm(`Remove ${name} from this server?`)) return; const r = await apiRequest(`/hosting/servers/${serverId}/subusers/${id}`, { method: 'DELETE' }); if (r.success) { notify('success', 'Removed'); load(); } else notify('error', r.error?.message || 'Failed'); };
 
   return (
     <Card className="!p-0 overflow-hidden">
       <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800">
-        <p className="text-xs text-zinc-400"><b className="text-zinc-200">{d.items.length}</b> of {d.limit} team members</p>
-        <Btn size="sm" variant="primary" disabled={d.items.length >= d.limit} onClick={() => setForm({ identifier: '', permissions: PRESETS[1].perms })}><UserPlus className="h-3.5 w-3.5" />Add member</Btn>
+        <p className="text-xs text-zinc-400"><b className="text-zinc-200">{d.items.length}</b> of {d.limit} users</p>
+        <Btn size="sm" variant="primary" disabled={d.items.length >= d.limit} onClick={() => setForm({ identifier: '', permissions: PRESETS[1].perms })}><UserPlus className="h-3.5 w-3.5" />Add user</Btn>
       </div>
-      {d.items.length === 0 ? <Empty icon={<Users className="h-10 w-10" />} title="No team members yet" text="Add someone by username or email. They need an account already." /> : (
+      {d.items.length === 0 ? <Empty icon={<Users className="h-10 w-10" />} title="No users yet" text="Add someone by username or email. They need an account already." /> : (
         <ul className="divide-y divide-zinc-800/70">{d.items.map(m => (
           <li key={m.id} className="px-4 py-3 flex items-start gap-3">
             <div className="min-w-0 flex-1"><p className="text-sm font-semibold text-white">{m.username}</p><p className="text-[11px] text-zinc-600">{m.email}</p>
@@ -52,11 +52,11 @@ export const TeamTab: React.FC<{ serverId: string; onUpgrade: () => void; notify
             <Btn size="sm" onClick={() => setForm({ id: m.id, identifier: m.username, permissions: m.permissions })} aria-label="Edit"><Pencil className="h-3.5 w-3.5" /></Btn>
             <Btn size="sm" variant="danger" onClick={() => remove(m.id, m.username)} aria-label="Remove"><Trash2 className="h-3.5 w-3.5" /></Btn>
           </li>))}</ul>)}
-      <Modal open={!!form} onClose={() => setForm(null)} title={form?.id ? `Permissions for ${form.identifier}` : 'Add a team member'} footer={<><Btn onClick={() => setForm(null)}>Cancel</Btn><Btn variant="primary" busy={busy} disabled={!form || form.permissions.length === 0 || (!form.id && !form.identifier.trim())} onClick={save}>{form?.id ? 'Save' : 'Add member'}</Btn></>}>
+      <Modal open={!!form} onClose={() => setForm(null)} title={form?.id ? `Permissions for ${form.identifier}` : 'Add a user'} footer={<><Btn onClick={() => setForm(null)}>Cancel</Btn><Btn variant="primary" busy={busy} disabled={!form || form.permissions.length === 0 || (!form.id && !form.identifier.trim())} onClick={save}>{form?.id ? 'Save' : 'Add user'}</Btn></>}>
         {form && <div className="space-y-4">
           {!form.id && <Field label="Username or email"><TextInput value={form.identifier} onChange={e => setForm({ ...form, identifier: e.target.value })} placeholder="their-username" autoFocus /></Field>}
           <div><p className="text-[10px] font-mono uppercase tracking-wider text-zinc-500 mb-2">Permissions</p><PermPicker all={d.permissions} value={form.permissions} onChange={v => setForm({ ...form, permissions: v })} /></div>
-          <p className="text-[11px] text-zinc-500">Members can never delete the server, renew it, or manage the team.</p>
+          <p className="text-[11px] text-zinc-500">Users can never delete the server, renew it, or manage users.</p>
         </div>}
       </Modal>
     </Card>
