@@ -17,6 +17,7 @@ import statusRoutes from './server/routes/status';
 import apiKeysRoutes from './server/routes/apiKeys';
 import hostingRoutes from './server/routes/hosting';
 import hostingExtraRoutes from './server/routes/hostingExtra';
+import hostingToolsRoutes, { activityHook } from './server/routes/hostingTools';
 import { startScheduleRunner } from './server/hosting/schedules';
 import hostingAdminRoutes, { serveMedia } from './server/routes/hostingAdmin';
 import hostingBillingRoutes, { publicRouter as hostingPublicRoutes, stripeWebhook } from './server/routes/hostingBilling';
@@ -160,8 +161,10 @@ async function startServer() {
   app.get('/api/v1/media/:id', serveMedia);
   app.use('/api/v1/hosting-public', hostingPublicRoutes);
   app.use('/api/v1/hosting/billing', hostingBillingRoutes);
+  app.use('/api/v1/hosting', activityHook); // records server activity for every mutating request that succeeds
   app.use('/api/v1/hosting', hostingRoutes);
   app.use('/api/v1/hosting', hostingExtraRoutes);
+  app.use('/api/v1/hosting', hostingToolsRoutes);
   app.use('/api/v1/economy', economyRoutes);
   app.use('/api/v1/admin/hosting', hostingAdminRoutes);
   app.use('/api/v1/admin', adminRoutes);
