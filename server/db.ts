@@ -19,7 +19,7 @@ import {
 import { SqliteStore } from './storage/sqliteStore';
 import { defaultAddons } from './hosting/seed';
 import { defaultPlans as defaultHostingPlans, defaultHostingSettings } from './hosting/plans';
-import { defaultImages, defaultStoreItems } from './hosting/seed';
+import { defaultImages, defaultStoreItems, upgradeLegacyNodeImage } from './hosting/seed';
 
 const DATA_DIR = path.join(process.cwd(), 'data');
 const DB_FILE = path.join(DATA_DIR, 'db.json');                       // legacy JSON database (auto-imported once, then renamed)
@@ -504,6 +504,7 @@ export async function getDb(reload = false): Promise<DatabaseSchema> {
         // Hosting collections: seeded only when the field is MISSING (an empty list means the admin deleted them).
         if (!Array.isArray(dbCache.nodes)) dbCache.nodes = [];
         if (!Array.isArray(dbCache.images)) dbCache.images = defaultImages();
+        for (const img of dbCache.images) upgradeLegacyNodeImage(img); // untouched default Node.js software gets the Startup-tab variables
         if (!Array.isArray(dbCache.servers)) dbCache.servers = [];
         if (!Array.isArray(dbCache.backups)) dbCache.backups = [];
         if (!Array.isArray(dbCache.hostingPlans)) dbCache.hostingPlans = defaultHostingPlans(new Date().toISOString());
