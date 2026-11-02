@@ -209,6 +209,18 @@ export function registerRoutes(): void {
     return { ok: true, name, size: fs.statSync(dest).size };
   }, 64 * 1024);
 
+  route('POST', '/v1/servers/:id/files/move', ({ params, body }) => { const id = assertId(params.id); needSpec(id); return { ok: true, moved: fsops.moveItems(id, body.paths, body.dest) }; });
+  route('POST', '/v1/servers/:id/files/copy', async ({ params, body }) => { const id = assertId(params.id); const spec = needSpec(id); return { ok: true, names: await fsops.copyItems(id, body.paths, body.dest, spec.limits.diskMB) }; });
+  route('POST', '/v1/servers/:id/files/archive', async ({ params, body }) => { const id = assertId(params.id); const spec = needSpec(id); return { ok: true, name: await fsops.archive(id, body.path || '/', body.names, body.name, spec.limits.diskMB) }; }, 64 * 1024);
+  route('POST', '/v1/servers/:id/files/bulk-download', ({ params, body, req, res }) => {
+    const id = assertId(params.id); needSpec(id);
+    const { child, filename } = fsops.spawnArchive(id, body.path || '/', body.names);
+    res.writeHead(200, { 'Content-Type': 'application/gzip', 'Content-Disposition': `attachment; filename="${filename}"`, 'X-Content-Type-Options': 'nosniff' });
+    child.stdout!.pipe(res);
+    child.on('error', () => res.destroy());
+    req.on('close', () => { if (!child.killed) child.kill('SIGKILL'); });
+  });
+
   // ---- recycle bin -----------------------------------------------------------------------------
   route('GET', '/v1/servers/:id/recycle', ({ params }) => { const id = assertId(params.id); needSpec(id); return { retentionDays: recycle.RETENTION_DAYS, items: recycle.list(id) }; });
   route('POST', '/v1/servers/:id/recycle/restore', ({ params, body }) => { const id = assertId(params.id); needSpec(id); return { ok: true, restored: recycle.restore(id, body.ids, body.all === true) }; });

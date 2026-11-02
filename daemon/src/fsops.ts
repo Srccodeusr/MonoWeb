@@ -153,3 +153,124 @@ export function run(cmd: string, args: string[], cwd?: string): Promise<string> 
     c.on('exit', code => (code === 0 ? resolve(out) : reject(new HttpError(500, `${cmd} failed: ${err.slice(0, 200)}`))));
   });
 }
+
+// ---------------------------------------------------------------------------------------------
+// Move / copy / archive (the Pterodactyl-style file manager actions)
+// ---------------------------------------------------------------------------------------------
+const MAX_ITEMS = 500;
+
+function isSameOrInside(parent: string, child: string): boolean {
+  const rel = path.relative(parent, child);
+  return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel));
+}
+function sizeOfPath(p: string): number {
+  const st = fs.lstatSync(p);
+  return st.isDirectory() ? diskUsage(p) : st.size;
+}
+function needList(v: unknown): string[] {
+  if (!Array.isArray(v) || v.length === 0 || v.length > MAX_ITEMS || v.some(x => typeof x !== 'string')) throw new HttpError(400, 'Invalid paths');
+  return v as string[];
+}
+function needDir(p: string, what: string): void {
+  if (!fs.existsSync(p) || !fs.statSync(p).isDirectory()) throw new HttpError(404, `${what} does not exist`);
+}
+
+/** Move files/folders into an existing folder. Everything is checked first, so a conflict never leaves a half-done move. */
+export function moveItems(id: string, rels: unknown, destRel: unknown): number {
+  const list = needList(rels);
+  const root = fs.realpathSync(volumePath(id));
+  const dest = resolveInVolume(id, destRel);
+  needDir(dest, 'The destination folder');
+  const seen = new Set<string>();
+  const plan: { src: string; target: string }[] = [];
+  for (const rel of list) {
+    const src = resolveInVolume(id, rel);
+    if (src === root) throw new HttpError(400, 'Refusing to move the server root');
+    if (!fs.existsSync(src)) throw new HttpError(404, `${path.basename(src)} no longer exists`);
+    const target = path.join(dest, path.basename(src));
+    if (src === target) continue; // already there
+    if (fs.statSync(src).isDirectory() && isSameOrInside(src, dest)) throw new HttpError(400, `Cannot move ${path.basename(src)} into itself`);
+    if (fs.existsSync(target) || seen.has(target)) throw new HttpError(409, `${path.basename(src)} already exists in the destination`);
+    seen.add(target); plan.push({ src, target });
+  }
+  for (const { src, target } of plan) fs.renameSync(src, target);
+  return plan.length;
+}
+
+function freeCopyName(dir: string, name: string, isDir: boolean): string {
+  if (!fs.existsSync(path.join(dir, name))) return name;
+  const dot = isDir ? -1 : name.lastIndexOf('.');
+  const stem = dot > 0 ? name.slice(0, dot) : name, extn = dot > 0 ? name.slice(dot) : '';
+  for (let n = 1; n < 1000; n++) {
+    const c = `${stem} copy${n > 1 ? ' ' + n : ''}${extn}`;
+    if (!fs.existsSync(path.join(dir, c))) return c;
+  }
+  throw new HttpError(409, 'Too many copies of this file');
+}
+
+/** Copy into `destRel` (default: next to the original, named "name copy"). Returns the new names. */
+export async function copyItems(id: string, rels: unknown, destRel: unknown, limitMB: number): Promise<string[]> {
+  const list = needList(rels);
+  const root = fs.realpathSync(volumePath(id));
+  const srcs = list.map(rel => {
+    const src = resolveInVolume(id, rel);
+    if (src === root) throw new HttpError(400, 'Refusing to copy the server root');
+    if (!fs.existsSync(src)) throw new HttpError(404, `${path.basename(src)} no longer exists`);
+    assertRegular(src);
+    return src;
+  });
+  const dest = typeof destRel === 'string' && destRel ? resolveInVolume(id, destRel) : null;
+  if (dest) needDir(dest, 'The destination folder');
+  let total = 0;
+  for (const s of srcs) {
+    total += sizeOfPath(s);
+    const dir = dest || path.dirname(s);
+    if (fs.statSync(s).isDirectory() && isSameOrInside(s, dir) && dest) throw new HttpError(400, `Cannot copy ${path.basename(s)} into itself`);
+  }
+  checkQuota(id, total, limitMB);
+  const made: string[] = [];
+  for (const s of srcs) {
+    const dir = dest || path.dirname(s);
+    const isDir = fs.statSync(s).isDirectory();
+    const name = freeCopyName(dir, path.basename(s), isDir);
+    const target = path.join(dir, name);
+    // a folder copied into its own parent folder must not recurse into the copy being made
+    fs.cpSync(s, target, { recursive: true, errorOnExist: true, force: false, verbatimSymlinks: true, filter: src => src !== target });
+    await chownTree(target);
+    made.push(name);
+  }
+  return made;
+}
+
+function cleanNames(dir: string, names: unknown): string[] {
+  const list = needList(names).map(n => safeName(n));
+  for (const n of list) if (!fs.existsSync(path.join(dir, n))) throw new HttpError(404, `${n} no longer exists`);
+  return [...new Set(list)];
+}
+
+/** Create `<name>.tar.gz` in `dirRel` from the given child names. */
+export async function archive(id: string, dirRel: unknown, names: unknown, archiveName: unknown, limitMB: number): Promise<string> {
+  const dir = resolveInVolume(id, dirRel);
+  needDir(dir, 'The folder');
+  const list = cleanNames(dir, names);
+  const stamp = new Date().toISOString().replace(/[:.]/g, '').slice(0, 17);
+  let name = safeName(typeof archiveName === 'string' && archiveName.trim() ? archiveName.trim() : `archive-${stamp}`);
+  if (!/\.tar\.gz$/i.test(name)) name += '.tar.gz';
+  const out = path.join(dir, name);
+  if (fs.existsSync(out)) throw new HttpError(409, `${name} already exists`);
+  checkQuota(id, list.reduce((n, x) => n + sizeOfPath(path.join(dir, x)), 0), limitMB); // upper bound: compressed output is rarely larger
+  try { await run('tar', ['-czf', out, '-C', dir, '--', ...list.map(n => './' + n)]); }
+  catch (e) { fs.rmSync(out, { force: true }); throw e; }
+  chownMaybe(out);
+  return name;
+}
+
+/** Streams a tar.gz of the selected children to the caller (bulk download, nothing is written to the server's disk). */
+export function spawnArchive(id: string, dirRel: unknown, names: unknown): { child: ReturnType<typeof spawn>; filename: string } {
+  const dir = resolveInVolume(id, dirRel);
+  needDir(dir, 'The folder');
+  const list = cleanNames(dir, names);
+  const base = path.basename(dir) === path.basename(volumePath(id)) ? 'files' : path.basename(dir);
+  const child = spawn('tar', ['-czf', '-', '-C', dir, '--', ...list.map(n => './' + n)], { stdio: ['ignore', 'pipe', 'ignore'] });
+  return { child, filename: `${base.replace(/[^\w.-]+/g, '_')}.tar.gz` };
+}
