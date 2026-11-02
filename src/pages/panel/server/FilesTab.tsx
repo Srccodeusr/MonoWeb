@@ -1,14 +1,15 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Folder, File as FileIcon, FileCode, FileText, FileArchive, FileImage, FilePlus, FolderPlus, Upload, FolderUp, Link2, Trash2, Download, Pencil, Archive, Copy, MoreVertical, RefreshCw, Search, ChevronRight, ChevronDown, ArrowLeft, Save, Network, FileUp, CornerLeftUp } from 'lucide-react';
+import { Folder, File as FileIcon, FileCode, FileText, FileArchive, FileImage, FilePlus, FolderPlus, Upload, FolderUp, Link2, Trash2, Download, Pencil, Archive, Copy, MoreVertical, RefreshCw, Search, ChevronRight, ChevronDown, ArrowLeft, Save, Network, FileUp, CornerLeftUp, MoveRight, CopyPlus, PackagePlus } from 'lucide-react';
 import { apiRequest } from '../../../lib/api';
 import { Btn, Card, Empty, Spinner, TextInput, cx, fmtDate } from '../../../components/ui/kit';
 import { Checkbox, ConfirmModal, Menu, PromptModal, TabHeader } from '../../../components/ui/panelKit';
 import { SftpCard } from './SftpCard';
 import { RecycleBin } from './RecycleBin';
+import { FolderPicker } from './FolderPicker';
 
 interface Entry { name: string; type: 'file' | 'dir'; size: number; modified: string }
 type Notify = (t: 'success' | 'error', m: string) => void;
-type Dialog = null | { kind: 'newFile' } | { kind: 'newFolder' } | { kind: 'pull' } | { kind: 'rename'; entry: Entry } | { kind: 'delete'; names: string[] } | { kind: 'leave' };
+type Dialog = null | { kind: 'newFile' } | { kind: 'newFolder' } | { kind: 'pull' } | { kind: 'rename'; entry: Entry } | { kind: 'delete'; names: string[] } | { kind: 'move'; names: string[] } | { kind: 'copy'; names: string[] } | { kind: 'archive'; names: string[] } | { kind: 'leave' };
 
 const MAX_UPLOAD = 6 * 1024 * 1024;
 const sizeText = (b: number) => (b >= 1073741824 ? `${(b / 1073741824).toFixed(1)} GB` : b >= 1048576 ? `${(b / 1048576).toFixed(1)} MB` : b >= 1024 ? `${(b / 1024).toFixed(1)} KB` : `${b} B`);
@@ -107,10 +108,22 @@ export const FilesTab: React.FC<{ serverId: string; writable: boolean; notify: N
     const url = URL.createObjectURL(await res.blob()); const a = document.createElement('a'); a.href = url; a.download = e.name; a.click(); URL.revokeObjectURL(url);
   };
 
+  const downloadMany = async (names: string[]) => {
+    const one = (entries || []).find(e => e.name === names[0]);
+    if (names.length === 1 && one?.type === 'file') return download(one);
+    notify('success', 'Preparing your download…');
+    const res = await fetch(`/api/v1${base}/bulk-download`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('aether_token') || ''}` }, body: JSON.stringify({ path, names }) });
+    if (!res.ok) { let m = 'Download failed.'; try { m = (await res.json()).error?.message || m; } catch { /* not json */ } return notify('error', m); }
+    const fname = /filename="?([^"]+)"?/.exec(res.headers.get('content-disposition') || '')?.[1] || 'files.tar.gz';
+    const url = URL.createObjectURL(await res.blob()); const a = document.createElement('a'); a.href = url; a.download = fname; a.click(); URL.revokeObjectURL(url);
+  };
+  const archiveDefault = useMemo(() => `archive-${new Date().toISOString().replace(/[:.]/g, '').slice(0, 17)}.tar.gz`, [dialog]);
+
   const rowMenu = (e: Entry) => [
     { label: e.type === 'dir' ? 'Open' : 'Edit', icon: e.type === 'dir' ? <Folder /> : <Pencil />, onClick: () => openEntry(e) },
     ...(writable ? [{ label: 'Rename', icon: <Pencil />, onClick: () => setDialog({ kind: 'rename', entry: e }) }] : []),
-    ...(e.type === 'file' ? [{ label: 'Download', icon: <Download />, onClick: () => download(e) }] : []),
+    ...(writable ? [{ label: 'Move', icon: <MoveRight />, onClick: () => setDialog({ kind: 'move', names: [e.name] }) }, { label: 'Copy', icon: <CopyPlus />, onClick: () => setDialog({ kind: 'copy', names: [e.name] }) }, { label: 'Archive', icon: <PackagePlus />, onClick: () => setDialog({ kind: 'archive', names: [e.name] }) }] : []),
+    { label: e.type === 'dir' ? 'Download as .tar.gz' : 'Download', icon: <Download />, onClick: () => downloadMany([e.name]) },
     ...(writable && e.type === 'file' && /\.(zip|tar\.gz|tgz)$/i.test(e.name) ? [{ label: 'Extract here', icon: <Archive />, onClick: () => act('extract', { path: join(path, e.name), dest: path }, 'Extracted') }] : []),
     { label: 'Copy path', icon: <Copy />, onClick: () => navigator.clipboard?.writeText(join(path, e.name)).then(() => notify('success', 'Path copied')) },
     ...(writable ? ['divider' as const, { label: 'Delete', icon: <Trash2 />, danger: true, onClick: () => setDialog({ kind: 'delete', names: [e.name] }) }] : []),
@@ -181,6 +194,16 @@ export const FilesTab: React.FC<{ serverId: string; writable: boolean; notify: N
           { label: 'Upload Folder', icon: <FolderUp />, onClick: () => folderInput.current?.click() },
           { label: 'Pull from URL', icon: <Link2 />, onClick: () => setDialog({ kind: 'pull' }) },
         ]} />
+        {sel.size > 0 && <>
+          <span className="hidden sm:block h-6 w-px bg-zinc-800" />
+          <span className="text-[11px] font-mono text-zinc-400">{sel.size} selected</span>
+          <Btn size="sm" onClick={() => downloadMany(selected)}><Download className="h-3.5 w-3.5" />Download</Btn>
+          {writable && <>
+            <Btn size="sm" onClick={() => setDialog({ kind: 'move', names: selected })}><MoveRight className="h-3.5 w-3.5" />Move</Btn>
+            <Btn size="sm" onClick={() => setDialog({ kind: 'copy', names: selected })}><CopyPlus className="h-3.5 w-3.5" />Copy</Btn>
+            <Btn size="sm" onClick={() => setDialog({ kind: 'archive', names: selected })}><PackagePlus className="h-3.5 w-3.5" />Archive</Btn>
+          </>}
+        </>}
         <Btn variant="danger" disabled={!writable || sel.size === 0} onClick={() => setDialog({ kind: 'delete', names: selected })} aria-label="Delete selected" title="Delete selected"><Trash2 className="h-3.5 w-3.5" />{sel.size > 0 && <span>{sel.size}</span>}</Btn>
         {up && <span className="text-[11px] font-mono text-amber-300 flex items-center gap-2"><RefreshCw className="h-3 w-3 animate-spin" />Uploading {Math.min(up.done + 1, up.total)} of {up.total}…</span>}
         <input ref={fileInput} type="file" multiple hidden onChange={e => fromInput(e.target)} />
@@ -226,6 +249,12 @@ export const FilesTab: React.FC<{ serverId: string; writable: boolean; notify: N
         onSubmit2={async (url, name) => { if (await act('pull', { url, path, name: name || undefined }, 'File downloaded')) setDialog(null); }} />
       <PromptModal open={dialog?.kind === 'rename'} title="Rename" label="New name" initial={dialog?.kind === 'rename' ? dialog.entry.name : ''} confirmLabel="Rename" busy={busy} onClose={() => setDialog(null)}
         onSubmit={async name => { if (dialog?.kind !== 'rename') return; if (name === dialog.entry.name) return setDialog(null); if (await act('rename', { from: join(path, dialog.entry.name), to: join(path, name) }, 'Renamed')) setDialog(null); }} />
+      <FolderPicker open={dialog?.kind === 'move'} title="Move" confirmLabel="Move here" serverId={serverId} initial={path} count={dialog?.kind === 'move' ? dialog.names.length : 0} busy={busy} onClose={() => setDialog(null)}
+        onSubmit={async dest => { if (dialog?.kind !== 'move') return; if (await act('move', { paths: dialog.names.map(n => join(path, n)), dest }, `Moved ${dialog.names.length} item${dialog.names.length === 1 ? '' : 's'}`)) setDialog(null); }} />
+      <FolderPicker open={dialog?.kind === 'copy'} title="Copy" confirmLabel="Copy here" serverId={serverId} initial={path} count={dialog?.kind === 'copy' ? dialog.names.length : 0} busy={busy} hint="in the same folder, copies are named “… copy”" onClose={() => setDialog(null)}
+        onSubmit={async dest => { if (dialog?.kind !== 'copy') return; if (await act('copy', { paths: dialog.names.map(n => join(path, n)), dest: dest === path ? undefined : dest }, `Copied ${dialog.names.length} item${dialog.names.length === 1 ? '' : 's'}`)) setDialog(null); }} />
+      <PromptModal open={dialog?.kind === 'archive'} title="Archive" label="Archive name" initial={archiveDefault} confirmLabel="Create archive" busy={busy} hint={dialog?.kind === 'archive' ? `${dialog.names.length} item${dialog.names.length === 1 ? '' : 's'} will be saved as a .tar.gz in ${path}.` : undefined} onClose={() => setDialog(null)}
+        onSubmit={async name => { if (dialog?.kind !== 'archive') return; if (await act('archive', { path, names: dialog.names, name }, 'Archive created')) setDialog(null); }} />
       <ConfirmModal open={dialog?.kind === 'delete'} title="Delete" confirmLabel="Move to recycle bin" danger busy={busy} onClose={() => setDialog(null)}
         onConfirm={async () => { if (dialog?.kind !== 'delete') return; if (await act('delete', { paths: dialog.names.map(n => join(path, n)) }, `Moved ${dialog.names.length} item${dialog.names.length === 1 ? '' : 's'} to the recycle bin`)) setDialog(null); }}>
         {dialog?.kind === 'delete' && <>Move <b className="text-white">{dialog.names.length === 1 ? dialog.names[0] : `${dialog.names.length} items`}</b> to the recycle bin? You can restore {dialog.names.length === 1 ? 'it' : 'them'} for 3 days.</>}
