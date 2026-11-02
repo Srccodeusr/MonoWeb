@@ -4,15 +4,64 @@ const now = () => new Date().toISOString();
 
 const NODE_INSTALL = `#!/bin/bash
 cd /mnt/server
+if [ "$USER_UPLOAD" = "1" ]; then echo "User upload mode: skipping the install step"; echo "Install complete"; exit 0; fi
 if [ -n "$GIT_ADDRESS" ]; then
   apt-get update -qq >/dev/null 2>&1 && apt-get install -y -qq git >/dev/null 2>&1
-  [ -d .git ] && git pull || git clone "$GIT_ADDRESS" .
+  URL="$GIT_ADDRESS"
+  if [ -n "$USERNAME" ] && [ -n "$ACCESS_TOKEN" ]; then URL="https://\${USERNAME}:\${ACCESS_TOKEN}@\${GIT_ADDRESS#https://}"; fi
+  BR=""; [ -n "$BRANCH" ] && BR="--branch $BRANCH"
+  [ -d .git ] && git pull || git clone $BR "$URL" .
 fi
 if [ ! -f package.json ]; then
   echo '{"name":"app","version":"1.0.0","main":"index.js"}' > package.json
   echo 'require("http").createServer((q,r)=>r.end("Hello from MonoNode!")).listen(process.env.SERVER_PORT||3000);console.log("Listening on",process.env.SERVER_PORT||3000)' > index.js
 fi
 echo "Install complete"`;
+
+/** Same variables and startup flow as the generic Node.js egg on Pterodactyl panels (POSIX sh: the daemon runs startup with /bin/sh -c). */
+export const NODE_STARTUP = [
+  'if [ "${USER_UPLOAD}" != "1" ] && [ -n "${GIT_ADDRESS}" ]; then',
+  '  if [ -n "${USERNAME}" ] && [ -n "${ACCESS_TOKEN}" ]; then GIT_URL="https://${USERNAME}:${ACCESS_TOKEN}@${GIT_ADDRESS#https://}"; else GIT_URL="${GIT_ADDRESS}"; fi;',
+  '  BR=""; [ -n "${BRANCH}" ] && BR="--branch ${BRANCH}";',
+  '  if [ ! -d .git ]; then git clone ${BR} "${GIT_URL}" .panel_clone && cp -a .panel_clone/. . && rm -rf .panel_clone;',
+  '  elif [ "${AUTO_UPDATE}" = "1" ]; then git pull; fi;',
+  'fi;',
+  '[ -n "${UNNODE_PACKAGES}" ] && npm uninstall ${UNNODE_PACKAGES};',
+  '[ -n "${NODE_PACKAGES}" ] && npm install ${NODE_PACKAGES};',
+  '[ -f ./package.json ] && npm install --omit=dev --no-audit --no-fund;',
+  'if [ -n "${MAIN_FILE}" ]; then node ./${MAIN_FILE} ${NODE_ARGS}; else echo "MAIN_FILE is not set. Skipping execution."; fi',
+].join(' ');
+
+const NODE_VARIABLES = (): HostImage['variables'] => [
+  { name: 'Git Repo Address', env: 'GIT_ADDRESS', default: '', description: 'GitHub repo to clone, e.g. https://github.com/user/repo_name', userEditable: true, rules: '/^(https:\\/\\/[^\\s]{3,200})?$/' },
+  { name: 'Install Branch', env: 'BRANCH', default: '', description: 'The branch to install.', userEditable: true, rules: '/^[A-Za-z0-9_.\\/-]{0,100}$/' },
+  { name: 'User Uploaded Files', env: 'USER_UPLOAD', default: '0', description: 'Skip all the install stuff if you are letting a user upload files. 0 = false (default), 1 = true', userEditable: true, rules: 'boolean' },
+  { name: 'Auto Update', env: 'AUTO_UPDATE', default: '0', description: 'Pull the latest files on startup when using a GitHub repo.', userEditable: true, rules: 'boolean' },
+  { name: 'Additional Node packages', env: 'NODE_PACKAGES', default: '', description: 'Install additional node packages. Use spaces to separate.', userEditable: true, rules: '/^[A-Za-z0-9@\\/._~^<>=* -]{0,300}$/' },
+  { name: 'Git Username', env: 'USERNAME', default: '', description: 'Username to auth with git.', userEditable: true, rules: '/^[A-Za-z0-9_.@-]{0,100}$/' },
+  { name: 'Uninstall Node packages', env: 'UNNODE_PACKAGES', default: '', description: 'Uninstall node packages. Use spaces to separate.', userEditable: true, rules: '/^[A-Za-z0-9@\\/._~^<>=* -]{0,300}$/' },
+  { name: 'Git Access Token', env: 'ACCESS_TOKEN', default: '', description: 'Password to use with git. It is best practice to use a Personal Access Token (github.com/settings/tokens).', userEditable: true, rules: '/^[A-Za-z0-9_.-]{0,200}$/' },
+  { name: 'Main file', env: 'MAIN_FILE', default: 'index.js', description: 'The file that starts the app. Can be .js and .ts', userEditable: true, rules: '/^[A-Za-z0-9_./-]{0,100}$/' },
+  { name: 'Additional Arguments', env: 'NODE_ARGS', default: '', description: 'Any extra arguments for nodejs or ts-node', userEditable: true, rules: '/^[A-Za-z0-9_=.\\/ :,@-]{0,200}$/' },
+];
+const NODE_DOCKER_IMAGES: Record<string, string> = {
+  'Node.js 25': 'ghcr.io/pterodactyl/yolks:nodejs_25', 'Node.js 24': 'ghcr.io/pterodactyl/yolks:nodejs_24',
+  'Node.js 22': 'ghcr.io/pterodactyl/yolks:nodejs_22', 'Node.js 20': 'ghcr.io/pterodactyl/yolks:nodejs_20',
+};
+
+/**
+ * One-time upgrade for databases created before the Startup tab existed: the untouched default Node.js software gets the
+ * full variable set + startup flow. Anything an admin already edited (startup text or more than the 2 original variables) is left alone.
+ */
+export function upgradeLegacyNodeImage(img: HostImage): boolean {
+  const legacyStartup = 'if [ -f package.json ]; then npm install --omit=dev --no-audit --no-fund; fi; node {{MAIN_FILE}}';
+  if (img.id !== 'img_nodejs' || img.startup !== legacyStartup || img.variables.some(v => v.env === 'BRANCH')) return false;
+  img.startup = NODE_STARTUP;
+  img.variables = NODE_VARIABLES();
+  img.dockerImages = { ...NODE_DOCKER_IMAGES, ...img.dockerImages };
+  img.install.script = NODE_INSTALL;
+  return true;
+}
 
 const PY_INSTALL = `#!/bin/bash
 cd /mnt/server
@@ -38,14 +87,11 @@ export function defaultImages(): HostImage[] {
   return [
     {
       ...base, createdAt: t, id: 'img_nodejs', name: 'Node.js', software: 'Node.js', category: 'Coding Languages',
-      description: 'Run any Node.js app, bot or API.',
-      dockerImages: { 'Node.js 22': 'ghcr.io/pterodactyl/yolks:nodejs_22', 'Node.js 20': 'ghcr.io/pterodactyl/yolks:nodejs_20' }, defaultImage: 'Node.js 22',
-      startup: 'if [ -f package.json ]; then npm install --omit=dev --no-audit --no-fund; fi; node {{MAIN_FILE}}', stopCommand: '^C',
+      description: 'Run any Node.js app, bot or API. Git deploys, extra packages and a main file are set in the Startup tab.',
+      dockerImages: { ...NODE_DOCKER_IMAGES }, defaultImage: 'Node.js 22',
+      startup: NODE_STARTUP, stopCommand: '^C',
       ports: [{ label: 'App', container: 3000, proto: 'tcp' }],
-      variables: [
-        { name: 'Main file', env: 'MAIN_FILE', default: 'index.js', description: 'File to run.', userEditable: true, rules: '/^[A-Za-z0-9_./-]{1,100}$/' },
-        { name: 'Git repository', env: 'GIT_ADDRESS', default: '', description: 'Optional public git URL cloned on install.', userEditable: true, rules: '/^(https:\\/\\/[^\\s]{3,200})?$/' },
-      ],
+      variables: NODE_VARIABLES(),
       install: { image: 'ghcr.io/pterodactyl/installers:debian', entrypoint: 'bash', script: NODE_INSTALL, files: [] }, runtime: 'any',
     },
     {
