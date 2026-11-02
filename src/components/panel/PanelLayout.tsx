@@ -78,7 +78,7 @@ const Shell: React.FC<Props> = ({ currentPage, onNavigate, children }) => {
   const noAds = !!data?.plan.noAds;
 
   return (
-    <div className="w-full max-w-5xl mx-auto">
+    <div className={cx('w-full mx-auto', currentPage === 'server' ? 'max-w-7xl' : 'max-w-5xl')}>
       {/* Icon tab strip, same structure as the reference panel: Servers / Create / Upgrade / Store / Earn / Account / More */}
       <nav className="sticky top-16 z-30 -mx-4 lg:mx-0 mb-4 bg-zinc-950/85 backdrop-blur border-b border-zinc-800/80 lg:rounded-2xl lg:border" aria-label="Panel">
         <div className="flex items-stretch justify-between sm:justify-center gap-0.5 px-1 overflow-x-auto no-scrollbar">
