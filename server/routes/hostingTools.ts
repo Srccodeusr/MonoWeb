@@ -2,7 +2,7 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { getDb, saveDbSync } from '../db';
 import { authMiddleware, AuthenticatedRequest } from '../auth';
 import { HostImage, HostServer, ServerActivityEntry } from '../../src/hostingTypes';
-import { DaemonError, daemon } from '../hosting/daemonClient';
+import { DaemonError, daemon, daemonFetch } from '../hosting/daemonClient';
 import { allow } from '../hosting/ratelimit';
 import { decryptSecret, encryptSecret, newId } from '../hosting/crypto';
 import { HostingError, buildPorts, dropStateCache, liveLimits, nodeFor, pushSpec, renderStartup, selectableNodes, userCaps } from '../hosting/serverService';
@@ -69,6 +69,9 @@ function describe(method: string, rest: string, b: any): { event: string; detail
     case 'POST files/mkdir': return { event: 'file.create', detail: `Created folder ${join(b?.path, b?.name)}` };
     case 'POST files/rename': return { event: 'file.rename', detail: `Renamed ${String(b?.from || '')} to ${String(b?.to || '')}` };
     case 'POST files/delete': return { event: 'file.delete', detail: `${b?.permanent ? 'Permanently deleted' : 'Moved to recycle bin:'} ${count(b?.paths)} item${count(b?.paths) === 1 ? '' : 's'}` };
+    case 'POST files/move': return { event: 'file.move', detail: `Moved ${count(b?.paths)} item${count(b?.paths) === 1 ? '' : 's'} to ${String(b?.dest || '/').slice(0, 160)}` };
+    case 'POST files/copy': return { event: 'file.copy', detail: `Copied ${count(b?.paths)} item${count(b?.paths) === 1 ? '' : 's'}` };
+    case 'POST files/archive': return { event: 'file.archive', detail: `Archived ${count(b?.names)} item${count(b?.names) === 1 ? '' : 's'}` };
     case 'POST files/extract': return { event: 'file.extract', detail: `Extracted ${String(b?.path || '')}` };
     case 'POST files/upload': return { event: 'file.upload', detail: `Uploaded ${join(b?.path, b?.name)}` };
     case 'POST files/pull': { let host = ''; try { host = new URL(String(b?.url)).host; } catch { /* ignore */ } return { event: 'file.pull', detail: `Pulled a file from ${host || 'a URL'}` }; }
@@ -141,6 +144,31 @@ for (const op of ['restore', 'purge'] as const) {
     ok(res, await daemon(nodeFor(db, server), 'POST', `/v1/servers/${server.id}/recycle/${op}`, { ids: Array.isArray(b.ids) ? b.ids.map(String).slice(0, 1000) : [], all: b.all === true }, { timeoutMs: 120_000 }));
   }));
 }
+for (const op of ['move', 'copy', 'archive'] as const) {
+  router.post(`/servers/:id/files/${op}`, handle(async (req, res) => {
+    const { db, server } = await member(req, 'files.write'); usable(server);
+    if (!allow(`fileop:${req.user!.id}`, 60, 60_000)) return err(res, 429, 'RATE_LIMIT', 'Slow down: too many file actions.');
+    const b = req.body || {};
+    const strs = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string').slice(0, 500) : []);
+    const body = op === 'archive' ? { path: b.path || '/', names: strs(b.names), name: typeof b.name === 'string' ? b.name : undefined } : { paths: strs(b.paths), dest: typeof b.dest === 'string' ? b.dest : undefined };
+    ok(res, await daemon(nodeFor(db, server), 'POST', `/v1/servers/${server.id}/files/${op}`, body, { timeoutMs: op === 'archive' ? 10 * 60_000 : 120_000 }));
+  }));
+}
+// Several files/folders as one .tar.gz download. Streamed through the panel so node addresses stay private.
+router.post('/servers/:id/files/bulk-download', async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { db, server } = await member(req, 'files.read');
+    if (!allow(`bulkdl:${req.user!.id}`, 10, 60_000)) return err(res, 429, 'RATE_LIMIT', 'Too many downloads. Wait a minute.');
+    const names = Array.isArray(req.body?.names) ? req.body.names.filter((x: unknown) => typeof x === 'string').slice(0, 500) : [];
+    const up = await daemonFetch(nodeFor(db, server), 'POST', `/v1/servers/${server.id}/files/bulk-download`, { path: req.body?.path || '/', names }, { timeoutMs: 10 * 60_000 });
+    if (!up.ok || !up.body) return err(res, up.status === 404 ? 404 : 502, 'NODE_ERROR', 'Download failed.');
+    res.writeHead(200, { 'Content-Type': 'application/gzip', 'Content-Disposition': up.headers.get('content-disposition') || 'attachment', 'X-Content-Type-Options': 'nosniff' });
+    const r = up.body.getReader();
+    req.on('close', () => r.cancel().catch(() => undefined));
+    for (;;) { const { value, done } = await r.read(); if (done) break; res.write(Buffer.from(value)); }
+    res.end();
+  } catch (e: any) { if (!res.headersSent) err(res, e instanceof HostingError ? e.status : 502, 'NODE_ERROR', e?.message || 'Download failed.'); else res.end(); }
+});
 router.post('/servers/:id/files/pull', handle(async (req, res) => {
   const { db, server } = await member(req, 'files.write'); usable(server);
   if (!allow(`pull:${req.user!.id}`, 10, 10 * 60_000)) return err(res, 429, 'RATE_LIMIT', 'Too many downloads. Wait a few minutes.');
