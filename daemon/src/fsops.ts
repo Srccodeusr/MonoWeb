@@ -3,6 +3,7 @@ import path from 'path';
 import { spawn } from 'child_process';
 import { config } from './config';
 import { HttpError, resolveInVolume, safeName, volumePath } from './safe';
+import { usage as recycleUsage } from './recycle';
 
 export interface Entry { name: string; type: 'file' | 'dir'; size: number; modified: string; mode: string }
 
@@ -63,7 +64,7 @@ export function diskUsage(dir: string, cap = Infinity): number {
 
 function checkQuota(id: string, extra: number, limitMB: number): void {
   if (!limitMB) return;
-  if (diskUsage(volumePath(id), limitMB * 1048576) + extra > limitMB * 1048576) throw new HttpError(507, 'Disk limit reached for this server');
+  if (diskUsage(volumePath(id), limitMB * 1048576) + recycleUsage(id) + extra > limitMB * 1048576) throw new HttpError(507, 'Disk limit reached for this server');
 }
 
 export function writeText(id: string, rel: string, content: string, limitMB: number): void {

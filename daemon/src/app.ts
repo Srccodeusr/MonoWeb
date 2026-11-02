@@ -4,11 +4,12 @@ import path from 'path';
 import { route, openSse, MB, Ctx } from './http';
 import { config } from './config';
 import { log } from './log';
-import { HttpError, assertId, assertImage, resolveInVolume, safeName, validateEnv, validatePorts, volumePath } from './safe';
+import { HttpError, assertId, assertImage, assertPublicUrl, resolveInVolume, safeName, validateEnv, validatePorts, volumePath } from './safe';
 import { getRuntime } from './runtime';
 import { ServerSpec, Limits } from './runtime/types';
 import * as store from './state';
 import * as fsops from './fsops';
+import * as recycle from './recycle';
 import * as backup from './backup';
 import { safeDownload } from './download';
 import * as transfer from './transfer';
@@ -83,7 +84,7 @@ export function registerRoutes(): void {
     await rt.remove(id);
     const dir = volumePath(id); // validated: can no longer be ../..
     fs.rmSync(dir, { recursive: true, force: true });
-    backup.deleteAllBackups(id);
+    backup.deleteAllBackups(id); recycle.removeBin(id);
     store.deleteSpec(id); store.clearInstall(id); diskExceeded.delete(id);
     return { ok: true };
   });
@@ -168,7 +169,7 @@ export function registerRoutes(): void {
     const spec = needSpec(id);
     const rt = await getRuntime();
     const s = await rt.stats(id, spec);
-    const disk = fsops.diskUsage(volumePath(id));
+    const disk = fsops.diskUsage(volumePath(id)) + recycle.usage(id); // the recycle bin counts towards the limit
     return { ...s, diskBytes: disk, diskLimit: spec.limits.diskMB * MB };
   });
 
@@ -190,7 +191,28 @@ export function registerRoutes(): void {
   route('PUT', '/v1/servers/:id/files/content', ({ params, body }) => { fsops.writeText(assertId(params.id), body.path, body.content, limitMB(params.id)); return { ok: true }; }, 8 * MB);
   route('POST', '/v1/servers/:id/files/mkdir', ({ params, body }) => { fsops.mkdir(assertId(params.id), body.path || '/', body.name); return { ok: true }; });
   route('POST', '/v1/servers/:id/files/rename', ({ params, body }) => { fsops.rename(assertId(params.id), body.from, body.to); return { ok: true }; });
-  route('POST', '/v1/servers/:id/files/delete', ({ params, body }) => ({ ok: true, deleted: fsops.remove(assertId(params.id), body.paths) }));
+  route('POST', '/v1/servers/:id/files/delete', ({ params, body }) => ({ ok: true, deleted: body.permanent === true ? fsops.remove(assertId(params.id), body.paths) : recycle.moveToBin(assertId(params.id), body.paths) }));
+  route('POST', '/v1/servers/:id/files/pull', async ({ params, body }) => {
+    const id = assertId(params.id); const spec = needSpec(id);
+    const dir = resolveInVolume(id, body.path || '/');
+    const url = await assertPublicUrl(String(body.url || ''));
+    const guess = (() => { try { return decodeURIComponent(path.posix.basename(url.pathname)); } catch { return ''; } })();
+    const name = safeName(String(body.name || guess || 'download'));
+    const dest = path.join(dir, name);
+    if (fs.existsSync(dest)) throw new HttpError(409, `${name} already exists in that folder`);
+    fs.mkdirSync(dir, { recursive: true });
+    const used = fsops.diskUsage(volumePath(id)) + recycle.usage(id);
+    const room = spec.limits.diskMB ? Math.max(0, spec.limits.diskMB * MB - used) : 512 * MB;
+    if (!room) throw new HttpError(507, 'Disk limit reached for this server');
+    await safeDownload(url.toString(), dest, Math.min(room, 512 * MB));
+    await fsops.chownTree(dest);
+    return { ok: true, name, size: fs.statSync(dest).size };
+  }, 64 * 1024);
+
+  // ---- recycle bin -----------------------------------------------------------------------------
+  route('GET', '/v1/servers/:id/recycle', ({ params }) => { const id = assertId(params.id); needSpec(id); return { retentionDays: recycle.RETENTION_DAYS, items: recycle.list(id) }; });
+  route('POST', '/v1/servers/:id/recycle/restore', ({ params, body }) => { const id = assertId(params.id); needSpec(id); return { ok: true, restored: recycle.restore(id, body.ids, body.all === true) }; });
+  route('POST', '/v1/servers/:id/recycle/purge', ({ params, body }) => { const id = assertId(params.id); needSpec(id); return { ok: true, purged: recycle.purge(id, body.ids, body.all === true) }; });
   route('POST', '/v1/servers/:id/files/extract', async ({ params, body }) => { await fsops.extract(assertId(params.id), body.path, body.dest || '/'); return { ok: true }; });
   route('POST', '/v1/servers/:id/files/upload', ({ params, body }) => {
     const data = Buffer.from(String(body.data || ''), 'base64');
