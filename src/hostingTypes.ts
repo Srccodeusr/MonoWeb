@@ -157,9 +157,18 @@ export interface HostServer {
   lastRenewedAt?: string;
   renewCount: number;
   notifiedExpiry?: boolean;
+  /** Per-server activity feed (newest first, capped). Written by routes/hostingTools.ts. */
+  activity?: ServerActivityEntry[];
+  /** Optional card/header background picture (http/https URL). */
+  backgroundUrl?: string;
+  /** MySQL databases created for this server (see hosting/databases.ts). */
+  databases?: HostDatabase[];
   /** Set while (or after a failed attempt at) moving the server to another node. */
   transfer?: { state: 'running' | 'failed'; fromNodeId: string; toNodeId: string; startedAt: string; step?: string; error?: string };
 }
+
+export interface ServerActivityEntry { id: string; at: string; userId: string; username: string; event: string; detail: string; ip?: string }
+export interface HostDatabase { id: string; name: string; username: string; passwordEnc: string; label: string; createdAt: string }
 
 export interface HostBackup {
   id: string;

@@ -3,16 +3,15 @@ import { AuthProvider, useAuth } from './lib/AuthContext';
 import { ThemeProvider } from './lib/ThemeContext';
 import { BrandingProvider, useBranding } from './lib/BrandingContext';
 import { ToastProvider } from './lib/ToastContext';
-import { AnimationProvider, useAnimation } from './lib/AnimationContext';
+import { AnimationProvider } from './lib/AnimationContext';
 import { PageTransition } from './components/animation/PageTransition';
-import { motion } from 'motion/react';
 import { ShieldAlert, RefreshCw, LogOut } from 'lucide-react';
 import { parseUrlToRoute, routeToUrl } from './lib/routing';
 
 // Components
 import { Navbar } from './components/Navbar';
 import { PanelLayout } from './components/panel/PanelLayout';
-import { AdminSidebar } from './components/AdminSidebar';
+import { AdminShell } from './components/AdminShell';
 import { Footer } from './components/Footer';
 import { CustomCursor } from './components/CustomCursor';
 import { GlobalSearchModal } from './components/GlobalSearchModal';
@@ -82,22 +81,8 @@ const CustomerShell: React.FC<{ enabled: boolean; currentPage: string; onNavigat
 function AppContent() {
   const { user, loading, logout } = useAuth();
   const { brandName, maintenanceMode, maintenanceMessage, refreshBranding } = useBranding();
-  const { settings, getTransitionProps, motionEnabled } = useAnimation();
 
   const [checkingMaintenance, setCheckingMaintenance] = useState(false);
-  const [isInitialPanelMount, setIsInitialPanelMount] = useState(true);
-
-  // Mark initial load finished once authenticated panel renders
-  useEffect(() => {
-    if (user) {
-      const timer = setTimeout(() => {
-        setIsInitialPanelMount(false);
-      }, 1200);
-      return () => clearTimeout(timer);
-    } else {
-      setIsInitialPanelMount(true);
-    }
-  }, [user]);
 
   // Parse initial route directly from current browser URL
   const initialRoute = parseUrlToRoute(window.location.pathname, window.location.search);
@@ -241,56 +226,8 @@ function AppContent() {
     }
   }
 
-  return (
-    <div className="min-h-screen max-w-full overflow-x-hidden bg-transparent text-zinc-100 flex flex-col font-sans selection:bg-amber-500 selection:text-black">
-      {/* Maintenance Mode Warning Banner for Public Pages */}
-      {maintenanceMode && isPublicPage && (
-        <div className="bg-amber-500 text-black py-2 px-4 text-center text-xs font-bold font-mono tracking-wide shadow-md shrink-0 flex items-center justify-center gap-2 z-50">
-          <ShieldAlert className="h-4 w-4 shrink-0" />
-          <span>PLATFORM UNDER MAINTENANCE: Billing and account write operations are temporarily frozen.</span>
-        </div>
-      )}
-
-      {/* Custom Cursor */}
-      <CustomCursor />
-
-      {/* Global Search Command Palette */}
-      <GlobalSearchModal
-        isOpen={isSearchOpen}
-        onClose={() => setIsSearchOpen(false)}
-        onNavigate={handleNavigate}
-      />
-
-      {/* Top Header Navbar */}
-      <Navbar
-        currentPage={currentPage}
-        onNavigate={handleNavigate}
-        onOpenSearch={() => setIsSearchOpen(true)}
-      />
-
-      {/* Main Body Layout */}
-      <div className="flex-1 flex flex-col lg:flex-row">
-
-        {/* Admin Sidebar */}
-        {isAdminPage && user && (
-          <motion.div
-            initial={motionEnabled && settings.initialPanelAnimation && isInitialPanelMount ? { opacity: 0, x: -20 } : { opacity: 1, x: 0 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: settings.intensity === 'subtle' ? 0.2 : settings.intensity === 'enhanced' ? 0.45 : 0.3, ease: 'easeOut' }}
-            className="shrink-0"
-          >
-            <AdminSidebar
-              currentPage={currentPage}
-              onNavigate={handleNavigate}
-            />
-          </motion.div>
-        )}
-
-        {/* Content Viewport */}
-        <main className="flex-1 overflow-x-hidden min-h-[calc(100vh-4rem)] flex flex-col justify-between p-4 lg:p-6">
-          <div className="flex-1 flex flex-col">
-            <CustomerShell enabled={isCustomerPage && !!user} currentPage={currentPage} onNavigate={handleNavigate}>
-            <PageTransition routeKey={currentPage}>
+  const pageContent = (
+    <PageTransition routeKey={currentPage}>
               <div className="flex-1 flex flex-col">
                 {/* Public Views */}
                 {currentPage === 'home' && <Home onNavigate={handleNavigate} />}
@@ -353,6 +290,47 @@ function AppContent() {
                 {currentPage === 'admin-panel-link' && <PanelLinkSettings />}
               </div>
             </PageTransition>
+  );
+  const adminShell = isAdminPage && !!user;
+
+  return (
+    <div className="min-h-screen max-w-full overflow-x-hidden bg-transparent text-zinc-100 flex flex-col font-sans selection:bg-amber-500 selection:text-black">
+      {/* Maintenance Mode Warning Banner for Public Pages */}
+      {maintenanceMode && isPublicPage && (
+        <div className="bg-amber-500 text-black py-2 px-4 text-center text-xs font-bold font-mono tracking-wide shadow-md shrink-0 flex items-center justify-center gap-2 z-50">
+          <ShieldAlert className="h-4 w-4 shrink-0" />
+          <span>PLATFORM UNDER MAINTENANCE: Billing and account write operations are temporarily frozen.</span>
+        </div>
+      )}
+
+      {/* Custom Cursor */}
+      <CustomCursor />
+
+      {/* Global Search Command Palette */}
+      <GlobalSearchModal
+        isOpen={isSearchOpen}
+        onClose={() => setIsSearchOpen(false)}
+        onNavigate={handleNavigate}
+      />
+
+      {adminShell ? (
+        <AdminShell currentPage={currentPage} onNavigate={handleNavigate} onOpenSearch={() => setIsSearchOpen(true)}>{pageContent}</AdminShell>
+      ) : (<>
+      {/* Top Header Navbar */}
+      <Navbar
+        currentPage={currentPage}
+        onNavigate={handleNavigate}
+        onOpenSearch={() => setIsSearchOpen(true)}
+      />
+
+      {/* Main Body Layout */}
+      <div className="flex-1 flex flex-col lg:flex-row">
+
+        {/* Content Viewport */}
+        <main className="flex-1 overflow-x-hidden min-h-[calc(100vh-4rem)] flex flex-col justify-between p-4 lg:p-6">
+          <div className="flex-1 flex flex-col">
+            <CustomerShell enabled={isCustomerPage && !!user} currentPage={currentPage} onNavigate={handleNavigate}>
+            {pageContent}
             </CustomerShell>
           </div>
 
@@ -368,6 +346,7 @@ function AppContent() {
 
       {/* Footer for Public Views */}
       {isPublicPage && <Footer onNavigate={handleNavigate} />}
+      </>)}
 
     </div>
   );
