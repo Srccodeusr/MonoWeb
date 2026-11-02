@@ -143,9 +143,7 @@ export const CreateServer: React.FC<{ onNavigate: (p: string, params?: any) => v
                 <div className="space-y-4 rounded-xl border border-zinc-800 bg-zinc-950/60 p-4">
                   <p className="text-xs text-zinc-400">{image.description}</p>
                   {image.versions.length > 1 && <Field label="Version"><Select value={version} onChange={e => setVersion(e.target.value)}>{image.versions.map(v => <option key={v}>{v}</option>)}</Select></Field>}
-                  {image.variables.map(v => (
-                    <Field key={v.env} label={v.name} hint={v.description}><TextInput value={vars[v.env] ?? ''} onChange={e => setVars(p => ({ ...p, [v.env]: e.target.value }))} className="font-mono text-xs" /></Field>
-                  ))}
+                  <p className="text-[11px] text-zinc-500">Main file, Git repository and other launch options are set later in the server’s <b className="text-zinc-300">Startup</b> tab.</p>
                   {lowRam && <p className="text-xs text-red-300">{image.name} needs at least {fmtMB(image.minRamMB)} RAM. Your {pack ? 'pack' : 'plan'} provides {fmtMB(specs.ram)}.</p>}
                 </div>
               )}
