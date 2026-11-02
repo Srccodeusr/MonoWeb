@@ -1,14 +1,14 @@
 import { Router, Response } from 'express';
 import { getDb, saveDbSync } from '../db';
 import { authMiddleware, requireRole, AuthenticatedRequest, createAuditLog } from '../auth';
-import { Mail } from '../../src/types';
+import { Mail, UserRole } from '../../src/types';
 
 const router = Router();
 
 // All mail routes require a logged-in account
 router.use(authMiddleware);
 
-const STAFF_ROLES = ['admin', 'super_admin', 'support', 'moderator'];
+const STAFF_ROLES: UserRole[] = ['admin', 'super_admin', 'support', 'moderator'];
 
 function displayName(u: { displayName?: string; username?: string; email: string }): string {
   return u.displayName || u.username || u.email.split('@')[0];
