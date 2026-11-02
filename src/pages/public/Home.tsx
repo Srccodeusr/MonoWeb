@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   Bot, ShieldCheck, ArrowRight, CheckCircle2, Server, Users,
   Headphones, Gauge, Lock, RotateCw, ChevronDown,
-  Terminal, Database, UserPlus, CreditCard, Play, Cpu
+  Terminal, Database, UserPlus, CreditCard, Play, Cpu, Star
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useBranding } from '../../lib/BrandingContext';
@@ -58,7 +58,36 @@ const FAQS = [
   {
     q: "What's included with VPS Hosting?",
     a: 'VPS plans include high-clock dedicated vCPU cores, full root access with any OS image, a free MySQL/Postgres database & subdomain, and routine backups with uptime monitoring.'
+  },
+  {
+    q: 'Is there a free plan?',
+    a: 'Yes. You can deploy a free server straight from your dashboard. Free servers are kept alive by renewing them now and then, and paid plans remove that step and unlock more resources.'
+  },
+  {
+    q: 'How do I get my bot or app onto the server?',
+    a: 'Open the File Manager to upload files or a whole folder from your device, pull a file from a URL, or clone a GitHub repository from the Startup tab. You can also connect with SFTP on plans that include it.'
+  },
+  {
+    q: 'What if I delete a file by accident?',
+    a: 'Deleted files go to the Recycle Bin first. You can restore them for 3 days before they are removed for good.'
+  },
+  {
+    q: 'Can I give friends access to my server?',
+    a: 'Yes. Paid plans let you add users to a server and choose exactly what each of them can do, such as viewing the console, editing files or restarting the server.'
+  },
+  {
+    q: 'Where do I set my main file and environment variables?',
+    a: 'In the Startup tab of your server. Set the main file, extra Node packages, Git details and other variables there, then restart the server to apply them.'
   }
+];
+
+const TESTIMONIALS = [
+  { name: 'Aarav M.', role: 'Discord bot developer', quote: 'I moved my bot over in one evening. The file manager and recycle bin saved me twice already, and it has not gone offline once.' },
+  { name: 'Lena K.', role: 'Community manager', quote: 'Setup took minutes. The console and startup tab feel like a proper control panel, and support answered my ticket in under an hour.' },
+  { name: 'Diego R.', role: 'Minecraft server owner', quote: 'Our Paper server runs smoothly with zero lag spikes, even during events. The activity log makes it easy to see who changed what.' },
+  { name: 'Priya S.', role: 'Indie developer', quote: 'Cloning my private repo from the Startup tab and turning on auto update is a huge time saver. Deploys are now one restart.' },
+  { name: 'Tomas B.', role: 'Telegram bot maker', quote: 'Great value for the price. Backups are one click and restoring a bad update took seconds instead of an afternoon.' },
+  { name: 'Hana W.', role: 'Student & hobbyist', quote: 'Started on the free plan to learn, upgraded when my project grew. The upgrade was instant and nothing had to be re-deployed.' }
 ];
 
 interface ProductCardProps {
@@ -329,8 +358,34 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
             </div>
           </div>
 
-          {/* FAQ */}
+          {/* Testimonials */}
           <div className="border-t border-zinc-800 pt-20 sm:pt-28">
+            <div className="text-center mb-12 space-y-3">
+              <span className={eyebrow}>Testimonials</span>
+              <h2 className="text-3xl sm:text-5xl font-bold text-white font-display">Loved by people who ship</h2>
+              <div className="flex items-center justify-center gap-2 text-sm text-zinc-400" aria-label="Rated 5 out of 5 stars">
+                <span className="flex gap-0.5">{[0, 1, 2, 3, 4].map(n => <Star key={n} className="h-5 w-5 fill-amber-400 text-amber-400" aria-hidden="true" />)}</span>
+                <span className="font-semibold text-white">5.0</span><span>from our community</span>
+              </div>
+            </div>
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
+              {TESTIMONIALS.map((t, i) => (
+                <Reveal key={t.name} delay={(i % 3) * 0.1} className="h-full">
+                  <figure className="h-full rounded-3xl border border-zinc-800 bg-zinc-900/40 p-6 sm:p-7 flex flex-col gap-5">
+                    <div className="flex gap-0.5" aria-label="5 out of 5 stars">{[0, 1, 2, 3, 4].map(n => <Star key={n} className="h-4 w-4 fill-amber-400 text-amber-400" aria-hidden="true" />)}</div>
+                    <blockquote className="text-sm sm:text-base text-zinc-300 leading-relaxed flex-1">“{t.quote}”</blockquote>
+                    <figcaption className="flex items-center gap-3">
+                      <span className="h-10 w-10 rounded-full bg-zinc-800 border border-zinc-700 text-white font-bold flex items-center justify-center text-sm" aria-hidden="true">{t.name[0]}</span>
+                      <span><span className="block text-sm font-semibold text-white">{t.name}</span><span className="block text-xs text-zinc-500">{t.role}</span></span>
+                    </figcaption>
+                  </figure>
+                </Reveal>
+              ))}
+            </div>
+          </div>
+
+          {/* FAQ */}
+          <div id="faq" className="border-t border-zinc-800 pt-20 sm:pt-28">
             <div className="mx-auto max-w-3xl">
               <div className="text-center mb-12 space-y-3">
                 <span className={eyebrow}>Support</span>
