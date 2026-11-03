@@ -73,6 +73,19 @@ import { AdminStore } from './pages/admin/AdminStore';
 import { AdminHostingSettings } from './pages/admin/AdminHostingSettings';
 import { AdminStripe } from './pages/admin/AdminStripe';
 
+// Native VPS panel (customer + admin)
+import { VpsList } from './pages/vps/VpsList';
+import { VpsDeploy } from './pages/vps/VpsDeploy';
+import { VpsServer } from './pages/vps/VpsServer';
+import { AdminVpsOverview } from './pages/admin/vps/AdminVpsOverview';
+import { AdminVpsNodes } from './pages/admin/vps/AdminVpsNodes';
+import { AdminVpsServers } from './pages/admin/vps/AdminVpsServers';
+import { AdminVpsPlans } from './pages/admin/vps/AdminVpsPlans';
+import { AdminVpsOrders } from './pages/admin/vps/AdminVpsOrders';
+import { AdminVpsImages } from './pages/admin/vps/AdminVpsImages';
+import { AdminVpsSettings } from './pages/admin/vps/AdminVpsSettings';
+import { AdminVpsActivity } from './pages/admin/vps/AdminVpsActivity';
+
 
 /** Customer pages share one panel shell (tab strip, announcement bar, payment watcher). It stays mounted between pages. */
 const CustomerShell: React.FC<{ enabled: boolean; currentPage: string; onNavigate: (p: string, params?: any) => void; children: React.ReactNode }> = ({ enabled, currentPage, onNavigate, children }) =>
@@ -250,6 +263,9 @@ function AppContent() {
                 {currentPage === 'servers' && <ServersOverview onNavigate={handleNavigate} />}
                 {currentPage === 'server-create' && <CreateServer onNavigate={handleNavigate} />}
                 {currentPage === 'server' && <ServerDetail key={pageParams?.id} id={String(pageParams?.id || '')} onNavigate={handleNavigate} />}
+                {currentPage === 'vps-list' && <VpsList onNavigate={handleNavigate} />}
+                {currentPage === 'vps-deploy' && <VpsDeploy onNavigate={handleNavigate} />}
+                {currentPage === 'vps-server' && <VpsServer key={pageParams?.id} id={String(pageParams?.id || '')} onNavigate={handleNavigate} />}
                 {currentPage === 'upgrade' && <Upgrade onNavigate={handleNavigate} />}
                 {currentPage === 'store' && <Store onNavigate={handleNavigate} />}
                 {currentPage === 'earn' && <Earn onNavigate={handleNavigate} />}
@@ -285,6 +301,14 @@ function AppContent() {
                 {currentPage === 'admin-hosting-settings' && <AdminHostingSettings />}
                 {currentPage === 'admin-stripe' && <AdminStripe />}
                 {currentPage === 'admin-addons' && <AdminAddons />}
+                {currentPage === 'admin-vps' && <AdminVpsOverview onNavigate={handleNavigate} />}
+                {currentPage === 'admin-vps-nodes' && <AdminVpsNodes />}
+                {currentPage === 'admin-vps-servers' && <AdminVpsServers />}
+                {currentPage === 'admin-vps-plans' && <AdminVpsPlans />}
+                {currentPage === 'admin-vps-orders' && <AdminVpsOrders />}
+                {currentPage === 'admin-vps-images' && <AdminVpsImages />}
+                {currentPage === 'admin-vps-settings' && <AdminVpsSettings />}
+                {currentPage === 'admin-vps-activity' && <AdminVpsActivity />}
                 {currentPage === 'admin-discord' && <AdminDiscord />}
                 {currentPage === 'admin-appearance' && <AdminAppearance />}
                 {currentPage === 'admin-panel-link' && <PanelLinkSettings />}
