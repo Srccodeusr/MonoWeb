@@ -22,6 +22,9 @@ import { startScheduleRunner } from './server/hosting/schedules';
 import hostingAdminRoutes, { serveMedia } from './server/routes/hostingAdmin';
 import hostingBillingRoutes, { publicRouter as hostingPublicRoutes, stripeWebhook } from './server/routes/hostingBilling';
 import economyRoutes from './server/routes/economy';
+import vpsRoutes from './server/routes/vps';
+import vpsAdminRoutes from './server/routes/vpsAdmin';
+import { startVpsScheduler } from './server/vps/service';
 import { startHostingScheduler } from './server/hosting/serverService';
 import { generalApiRateLimiter, sensitiveAuthRateLimiter, safePayloadErrorHandler } from './server/services/requestProtection';
 
@@ -167,6 +170,8 @@ async function startServer() {
   app.use('/api/v1/hosting', hostingToolsRoutes);
   app.use('/api/v1/economy', economyRoutes);
   app.use('/api/v1/admin/hosting', hostingAdminRoutes);
+  app.use('/api/v1/vps', vpsRoutes);                    // customer VPS panel (must not be shadowed by /api/v1/admin)
+  app.use('/api/v1/admin/vps', vpsAdminRoutes);         // admin VPS console (before the generic /admin router)
   app.use('/api/v1/admin', adminRoutes);
   app.use('/api/v1/ads', adsRoutes);
   app.use('/api/v1/discord', discordRoutes);
@@ -257,6 +262,7 @@ async function startServer() {
     console.log(`[Platform] Server running on http://0.0.0.0:${PORT}`);
     startHostingScheduler();
     startScheduleRunner();
+    startVpsScheduler();
   });
 
   server.on('error', (err: any) => {
