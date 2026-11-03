@@ -26,6 +26,7 @@ import {
   sanitizePanelUsername
 } from './panelService';
 import { setEphemeralSecret } from './ephemeralSecrets';
+import { nativeVpsHandles, provisionFromCheckout } from '../vps/service';
 
 function panelPasswordKey(provisionId: string): string {
   return `panel_pw:${provisionId}`;
@@ -85,6 +86,13 @@ async function doRunProvisioning(provisionId: string): Promise<void> {
   const db = await getDb();
   const record = db.provisions.find(p => p.id === provisionId);
   if (!record) return;
+
+  // VPS products are deployed by the native VPS module (server/vps) when it is enabled and has a node;
+  // everything else (and VPS orders when the module is off) keeps using the external panel flow below.
+  if (nativeVpsHandles(db, db.products.find(p => p.id === record.productId))) {
+    await provisionFromCheckout(record, updateProvision);
+    return;
+  }
 
   const settings = db.settings.panelIntegration;
   if (!settings || !settings.enabled || !settings.panelUrl || !settings.apiKey) {
