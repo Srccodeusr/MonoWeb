@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   ShieldAlert, Users, Package, ShoppingBag, Tag, Megaphone, LifeBuoy, FileText, Sliders, ArrowLeft, LogOut, Search, ChevronDown,
-  Sparkles, MessageSquare, Scale, Key, Link2, Mail, Network, Server, Boxes, Crown, CreditCard, Timer, Layers, UserCog, Palette, ScrollText, Menu, X, Receipt
+  Sparkles, MessageSquare, Scale, Key, Link2, Mail, Network, Server, Boxes, Crown, CreditCard, Timer, Layers, UserCog, Palette, ScrollText, Menu, X, Receipt, Cloud, HardDrive, Disc3, SlidersHorizontal, History, ShoppingCart
 } from 'lucide-react';
 import { useAuth } from '../lib/AuthContext';
 import { useBranding } from '../lib/BrandingContext';
@@ -19,6 +19,16 @@ const GROUPS: { title: string; items: Item[] }[] = [
     { page: 'admin-accounts', label: 'Account Management', icon: UserCog },
     { page: 'admin-images', label: 'Software Images', icon: Boxes },
     { page: 'admin-addons', label: 'Addon Store', icon: Package },
+  ] },
+  { title: 'VPS Hosting', items: [
+    { page: 'admin-vps', label: 'VPS Overview', icon: Cloud },
+    { page: 'admin-vps-servers', label: 'VPS Servers', icon: HardDrive },
+    { page: 'admin-vps-nodes', label: 'VPS Nodes', icon: Network },
+    { page: 'admin-vps-plans', label: 'VPS Plans', icon: Layers },
+    { page: 'admin-vps-orders', label: 'VPS Orders', icon: ShoppingCart },
+    { page: 'admin-vps-images', label: 'OS Images', icon: Disc3 },
+    { page: 'admin-vps-settings', label: 'VPS Settings', icon: SlidersHorizontal },
+    { page: 'admin-vps-activity', label: 'VPS Activity', icon: History },
   ] },
   { title: 'Plans & Revenue', items: [
     { page: 'admin-hosting-plans', label: 'Plans & Limits', icon: Crown },

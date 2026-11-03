@@ -3,7 +3,7 @@ import {
   Search, Shield, HelpCircle,
   Activity, User, Sparkles, BookOpen,
   CreditCard, Tag, ArrowRight, X, Package,
-  Users, Megaphone, ShoppingBag, MessageSquare, Link2
+  Users, Megaphone, ShoppingBag, MessageSquare, Link2, Server
 } from 'lucide-react';
 import { useAuth } from '../lib/AuthContext';
 
@@ -48,6 +48,14 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
         category: 'navigation',
         icon: User,
         action: () => onNavigate('servers')
+      },
+      {
+        id: 'nav_vps',
+        title: 'My VPS',
+        subtitle: 'Manage your virtual private servers: power, terminal, files and SSH',
+        category: 'navigation',
+        icon: Server,
+        action: () => onNavigate('vps-list')
       },
       {
         id: 'nav_pricing',
@@ -156,6 +164,22 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
           category: 'admin',
           icon: Megaphone,
           action: () => onNavigate('admin-announcements')
+        },
+        {
+          id: 'admin_vps',
+          title: 'Admin VPS Hosting',
+          subtitle: 'VPS servers, nodes, plans, orders and OS images',
+          category: 'admin',
+          icon: Server,
+          action: () => onNavigate('admin-vps')
+        },
+        {
+          id: 'admin_vps_servers',
+          title: 'Admin VPS Servers',
+          subtitle: 'Suspend, extend, resize, reinstall or delete customer VPSes',
+          category: 'admin',
+          icon: Server,
+          action: () => onNavigate('admin-vps-servers')
         },
         {
           id: 'admin_discord',
