@@ -16,6 +16,7 @@ import {
   HostNode, HostImage, HostServer, HostBackup, HostingPlan, StoreItem, Entitlement, CoinTx, EarnSession, MediaItem,
   HostSubuser, HostSchedule, HostSftpCred, Addon, AddonInstall
 } from '../src/hostingTypes';
+import { VpsNode, VpsPlan, VpsOsImage, VpsInstance, VpsOrder, VpsEvent, VpsSettings, defaultVpsImages, defaultVpsPlans, defaultVpsSettings } from '../src/vpsTypes';
 import { SqliteStore } from './storage/sqliteStore';
 import { defaultAddons } from './hosting/seed';
 import { defaultPlans as defaultHostingPlans, defaultHostingSettings } from './hosting/plans';
@@ -31,6 +32,8 @@ const DOC_COLLECTIONS = [
   'discordAuditLogs', 'apiKeys', 'apiAuditLogs', 'webhooks', 'legalPages', 'statusComponents', 'incidents', 'scheduledMaintenances', 'provisions',
   'nodes', 'images', 'servers', 'backups', 'hostingPlans', 'storeItems', 'entitlements', 'coinTx', 'earnSessions', 'media',
   'subusers', 'schedules', 'sftpCreds', 'addons', 'addonInstalls',
+  // native VPS hosting (server/vps/*)
+  'vpsNodes', 'vpsPlans', 'vpsImages', 'vpsServers', 'vpsOrders', 'vpsEvents',
 ];
 /** Record collections stored one row per key. */
 const MAP_COLLECTIONS = ['passwords', 'discordLinks'];
@@ -80,6 +83,14 @@ export interface DatabaseSchema {
   sftpCreds: HostSftpCred[];
   addons: Addon[];
   addonInstalls: AddonInstall[];
+  // --- native VPS hosting (MonoVPS panel merged in) ---
+  vpsNodes: VpsNode[];
+  vpsPlans: VpsPlan[];
+  vpsImages: VpsOsImage[];
+  vpsServers: VpsInstance[];
+  vpsOrders: VpsOrder[];
+  vpsEvents: VpsEvent[];
+  vpsSettings: VpsSettings;
 }
 
 const defaultProducts: Product[] = [
@@ -395,7 +406,14 @@ function defaultDb(): DatabaseSchema {
     schedules: [],
     sftpCreds: [],
     addons: defaultAddons(),
-    addonInstalls: []
+    addonInstalls: [],
+    vpsNodes: [],
+    vpsPlans: defaultVpsPlans(new Date().toISOString()),
+    vpsImages: defaultVpsImages(),
+    vpsServers: [],
+    vpsOrders: [],
+    vpsEvents: [],
+    vpsSettings: defaultVpsSettings()
   };
 }
 
@@ -519,6 +537,14 @@ export async function getDb(reload = false): Promise<DatabaseSchema> {
         if (!Array.isArray(dbCache.sftpCreds)) dbCache.sftpCreds = [];
         if (!Array.isArray(dbCache.addons)) dbCache.addons = defaultAddons();
         if (!Array.isArray(dbCache.addonInstalls)) dbCache.addonInstalls = [];
+        // Native VPS hosting: seeded only when the field is MISSING (an empty list means the admin removed them on purpose).
+        if (!Array.isArray(dbCache.vpsNodes)) dbCache.vpsNodes = [];
+        if (!Array.isArray(dbCache.vpsPlans)) dbCache.vpsPlans = defaultVpsPlans(new Date().toISOString());
+        if (!Array.isArray(dbCache.vpsImages)) dbCache.vpsImages = defaultVpsImages();
+        if (!Array.isArray(dbCache.vpsServers)) dbCache.vpsServers = [];
+        if (!Array.isArray(dbCache.vpsOrders)) dbCache.vpsOrders = [];
+        if (!Array.isArray(dbCache.vpsEvents)) dbCache.vpsEvents = [];
+        dbCache.vpsSettings = { ...defaultVpsSettings(), ...(dbCache.vpsSettings || {}) };
         // Plans saved before subusers/schedules/SFTP existed: grant sensible defaults to plans that already advertise the feature.
         for (const hp of dbCache.hostingPlans) {
           const ps: any = hp.perServer, f: any = hp.features;
