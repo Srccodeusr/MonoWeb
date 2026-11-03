@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Server, Plus, Star, ShoppingBag, Coins, User as UserIcon, LogOut, CreditCard, LifeBuoy, Mail, Activity, MoreHorizontal, Info, CheckCircle2, Loader2, Package } from 'lucide-react';
+import { Server, Plus, Star, ShoppingBag, Coins, User as UserIcon, LogOut, CreditCard, LifeBuoy, Mail, Activity, MoreHorizontal, Info, CheckCircle2, Loader2, Package, Cloud } from 'lucide-react';
 import { useAuth } from '../../lib/AuthContext';
 import { apiRequest } from '../../lib/api';
 import { AdBanner } from '../AdBanner';
@@ -11,6 +11,7 @@ interface Props { currentPage: string; onNavigate: (page: string, params?: any) 
 const TABS = [
   { page: 'servers', label: 'Servers', icon: Server, match: ['servers', 'server', 'addons'] },
   { page: 'server-create', label: 'Create', icon: Plus, match: ['server-create'] },
+  { page: 'vps-list', label: 'VPS', icon: Cloud, match: ['vps-list', 'vps-server', 'vps-deploy'] },
   { page: 'upgrade', label: 'Upgrade', icon: Star, match: ['upgrade'] },
   { page: 'store', label: 'Store', icon: ShoppingBag, match: ['store'] },
   { page: 'earn', label: 'Earn', icon: Coins, match: ['earn'] },
@@ -78,7 +79,7 @@ const Shell: React.FC<Props> = ({ currentPage, onNavigate, children }) => {
   const noAds = !!data?.plan.noAds;
 
   return (
-    <div className={cx('w-full mx-auto', currentPage === 'server' ? 'max-w-7xl' : 'max-w-5xl')}>
+    <div className={cx('w-full mx-auto', currentPage === 'server' || currentPage === 'vps-server' ? 'max-w-7xl' : 'max-w-5xl')}>
       {/* Icon tab strip, same structure as the reference panel: Servers / Create / Upgrade / Store / Earn / Account / More */}
       <nav className="sticky top-16 z-30 -mx-4 lg:mx-0 mb-4 bg-zinc-950/85 backdrop-blur border-b border-zinc-800/80 lg:rounded-2xl lg:border" aria-label="Panel">
         <div className="flex items-stretch justify-between sm:justify-center gap-0.5 px-1 overflow-x-auto no-scrollbar">
