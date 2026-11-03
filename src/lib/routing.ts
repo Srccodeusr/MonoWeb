@@ -47,6 +47,12 @@ export function parseUrlToRoute(pathname: string, search: string): RouteState {
     if (pathParts[1] && first === 'servers') return { page: 'server', params: { ...queryObj, id: pathParts[1] } };
     return { page: 'servers', params: queryObj };
   }
+  // Native VPS panel. NOTE: /vps is the public VPS Hosting marketing page, so the customer panel lives under /my-vps.
+  if (first === 'my-vps' || first === 'vps-panel') {
+    if (pathParts[1] === 'deploy' || pathParts[1] === 'new') return { page: 'vps-deploy', params: queryObj };
+    if (pathParts[1]) return { page: 'vps-server', params: { ...queryObj, id: pathParts[1] } };
+    return { page: 'vps-list', params: queryObj };
+  }
   if (first === 'upgrade' || first === 'plans') return { page: 'upgrade', params: queryObj };
   if (first === 'store' || first === 'shop') return { page: 'store', params: queryObj };
   if (first === 'earn' || first === 'rewards') return { page: 'earn', params: queryObj };
@@ -62,6 +68,11 @@ export function parseUrlToRoute(pathname: string, search: string): RouteState {
   if (first === 'admin') {
     if (pathParts.length === 1) return { page: 'admin-dashboard', params: queryObj };
     const sub = pathParts[1].toLowerCase();
+    if (sub === 'vps') {
+      const leaf = (pathParts[2] || '').toLowerCase();
+      const map: Record<string, string> = { '': 'admin-vps', nodes: 'admin-vps-nodes', servers: 'admin-vps-servers', plans: 'admin-vps-plans', orders: 'admin-vps-orders', images: 'admin-vps-images', settings: 'admin-vps-settings', activity: 'admin-vps-activity' };
+      return map[leaf] ? { page: map[leaf], params: queryObj } : { page: 'not-found', params: { ...queryObj, attemptedPath: pathname } };
+    }
     if (sub === 'dashboard') return { page: 'admin-dashboard', params: queryObj };
     if (sub === 'users') return { page: 'admin-users', params: queryObj };
     if (sub === 'products' || sub === 'plans') return { page: 'admin-products', params: queryObj };
@@ -128,6 +139,9 @@ export function routeToUrl(page: string, params?: Record<string, any>): string {
     case 'servers': return `/servers${formatQuery(params)}`;
     case 'server': return `/servers/${encodeURIComponent(String(params?.id || ''))}${formatQuery(params, ['id'])}`;
     case 'server-create': return `/servers/create${formatQuery(params)}`;
+    case 'vps-list': return `/my-vps${formatQuery(params)}`;
+    case 'vps-deploy': return `/my-vps/deploy${formatQuery(params)}`;
+    case 'vps-server': return `/my-vps/${encodeURIComponent(String(params?.id || ''))}${formatQuery(params, ['id'])}`;
     case 'upgrade': return `/upgrade${formatQuery(params)}`;
     case 'store': return `/store${formatQuery(params)}`;
     case 'earn': return `/earn${formatQuery(params)}`;
@@ -165,6 +179,14 @@ export function routeToUrl(page: string, params?: Record<string, any>): string {
     case 'admin-hosting-settings': return `/admin/hosting-settings${formatQuery(params)}`;
     case 'admin-stripe': return `/admin/stripe${formatQuery(params)}`;
     case 'admin-addons': return `/admin/addons${formatQuery(params)}`;
+    case 'admin-vps': return `/admin/vps${formatQuery(params)}`;
+    case 'admin-vps-nodes': return `/admin/vps/nodes${formatQuery(params)}`;
+    case 'admin-vps-servers': return `/admin/vps/servers${formatQuery(params)}`;
+    case 'admin-vps-plans': return `/admin/vps/plans${formatQuery(params)}`;
+    case 'admin-vps-orders': return `/admin/vps/orders${formatQuery(params)}`;
+    case 'admin-vps-images': return `/admin/vps/images${formatQuery(params)}`;
+    case 'admin-vps-settings': return `/admin/vps/settings${formatQuery(params)}`;
+    case 'admin-vps-activity': return `/admin/vps/activity${formatQuery(params)}`;
 
     case 'not-found': return params?.attemptedPath || '/404';
 
