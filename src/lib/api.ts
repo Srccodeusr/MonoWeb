@@ -21,10 +21,12 @@ export async function apiRequest<T = any>(
   endpoint: string,
   options: RequestInit = {}
 ): Promise<ApiResponse<T>> {
-  const token = localStorage.getItem('aether_token');
+  let token: string | null = null;
+  try { token = localStorage.getItem('aether_token'); } catch { /* storage blocked: the session cookie still authenticates */ }
 
   const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
+    // FormData / Blob bodies need the browser to set their own Content-Type (with the multipart boundary).
+    ...(typeof FormData !== 'undefined' && options.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }),
     ...(options.headers as Record<string, string> || {})
   };
 
@@ -64,6 +66,13 @@ export async function apiRequest<T = any>(
             : `Server returned non-JSON content type: ${contentType || 'unknown'} (Status: ${res.status})`
         }
       };
+    }
+
+    // The session is no longer valid (expired, revoked, password changed elsewhere): tell the app so it can sign the user
+    // out cleanly instead of leaving a half-working UI where every request silently fails.
+    if (res.status === 401 && token && !endpoint.startsWith('/auth/login') && !endpoint.startsWith('/auth/register') && !endpoint.startsWith('/auth/firebase')
+        && (data.error?.code === 'INVALID_TOKEN' || data.error?.code === 'UNAUTHORIZED')) {
+      window.dispatchEvent(new CustomEvent('mono:session-expired'));
     }
 
     if (!res.ok && !data.error) {

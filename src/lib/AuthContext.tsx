@@ -52,27 +52,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const fetchCurrentUser = useCallback(async () => {
-    const token = localStorage.getItem('aether_token');
-    if (!token) {
-      setUser(null);
-      setLoading(false);
-      return;
-    }
-
     try {
+      // Always ask the server: the session may live only in the httpOnly cookie (e.g. after a Discord sign-in popup).
       const res = await apiRequest('/auth/me');
       if (res.success && res.data?.user) {
         setUser(res.data.user);
-      } else {
-        localStorage.removeItem('aether_token');
+      } else if (res.error?.code === 'UNAUTHORIZED' || res.error?.code === 'INVALID_TOKEN') {
+        // Only a definite "not signed in" answer ends the session. A dropped connection, a 429 or a 500 on a phone used to
+        // wipe the token here and log the person out; now they simply stay as they were.
+        try { localStorage.removeItem('aether_token'); } catch { /* ignore */ }
         setUser(null);
       }
     } catch {
-      localStorage.removeItem('aether_token');
-      setUser(null);
+      /* network failure: keep the current session state */
     } finally {
       setLoading(false);
     }
+  }, []);
+
+  // apiRequest reports a rejected session here (see api.ts).
+  useEffect(() => {
+    const onExpired = () => { try { localStorage.removeItem('aether_token'); } catch { /* ignore */ } setUser(null); };
+    window.addEventListener('mono:session-expired', onExpired);
+    return () => window.removeEventListener('mono:session-expired', onExpired);
   }, []);
 
   useEffect(() => {
@@ -121,15 +123,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const googleProfile = await signInWithGoogleFirebase(authConfig.firebaseConfig);
 
-      const res = await apiRequest('/auth/firebase-google', {
+      // The server verifies the signed Firebase ID token itself; profile fields are taken from the token, never from us.
+      const res = await apiRequest('/auth/firebase-verify', {
         method: 'POST',
-        body: JSON.stringify({
-          email: googleProfile.email,
-          displayName: googleProfile.displayName,
-          photoUrl: googleProfile.photoUrl,
-          googleId: googleProfile.googleId,
-          idToken: googleProfile.idToken
-        })
+        body: JSON.stringify({ idToken: googleProfile.idToken })
       });
 
       if (res.success && res.data?.token) {
@@ -181,36 +178,46 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           });
         }
 
-        const handleMessage = (event: MessageEvent) => {
+        let settled = false;
+        let checkPopupClosed: ReturnType<typeof setInterval> | undefined;
+        const finish = (result: { success: boolean; message?: string }) => {
+          if (settled) return;
+          settled = true;
+          window.removeEventListener('message', handleMessage);
+          if (checkPopupClosed) clearInterval(checkPopupClosed);
+          resolve(result);
+        };
+
+        function handleMessage(event: MessageEvent) {
           if (event.origin !== window.location.origin) return;
           const type = event.data?.type;
           if ((type === 'MONONODE_DISCORD_OAUTH_SUCCESS' || type === 'DISCORD_AUTH_SUCCESS') && event.data?.token) {
-            window.removeEventListener('message', handleMessage);
-            localStorage.setItem('aether_token', event.data.token);
+            try { localStorage.setItem('aether_token', event.data.token); } catch { /* the cookie still carries the session */ }
             setUser(event.data.user);
-            resolve({ success: true });
+            finish({ success: true });
           } else if (type === 'MONONODE_DISCORD_OAUTH_ERROR' || type === 'DISCORD_AUTH_ERROR') {
-            window.removeEventListener('message', handleMessage);
-            resolve({
-              success: false,
-              message: event.data?.error || 'Discord authentication failed.'
-            });
+            finish({ success: false, message: event.data?.error || 'Discord authentication failed.' });
           }
-        };
+        }
 
         window.addEventListener('message', handleMessage);
 
-        const checkPopupClosed = setInterval(() => {
-          if (popup.closed) {
-            clearInterval(checkPopupClosed);
-            window.removeEventListener('message', handleMessage);
-            // If user wasn't set, resolve as cancelled
-            setTimeout(() => {
-              if (!localStorage.getItem('aether_token')) {
-                resolve({ success: false, message: 'Discord sign-in window closed.' });
-              }
-            }, 500);
-          }
+        checkPopupClosed = setInterval(() => {
+          if (!popup.closed) return;
+          clearInterval(checkPopupClosed);
+          // Some browsers cut the popup's link to this window after it visited discord.com, so the success message can
+          // never arrive. The server has already set the session cookie by then: ask it instead of giving up.
+          setTimeout(async () => {
+            if (settled) return;
+            const me = await apiRequest('/auth/me');
+            if (settled) return;
+            if (me.success && me.data?.user) {
+              setUser(me.data.user);
+              finish({ success: true });
+            } else {
+              finish({ success: false, message: 'Discord sign-in window closed.' });
+            }
+          }, 600);
         }, 500);
       });
     } catch (err: any) {
@@ -223,7 +230,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const logout = async () => {
     await apiRequest('/auth/logout', { method: 'POST' });
-    localStorage.removeItem('aether_token');
+    try { localStorage.removeItem('aether_token'); } catch { /* ignore */ }
     setUser(null);
   };
 

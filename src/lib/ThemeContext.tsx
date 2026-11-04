@@ -232,7 +232,12 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
 
     const blurVal = !backgroundBlur || backgroundBlur === 'none' ? '0px' : backgroundBlur;
-    const bgUrl = themeAssets.bgPatternUrl?.trim() || '';
+    // The URL is written into a <style> rule: only http(s), root-relative or image data URIs, with quotes/backslashes/parens
+    // escaped so a crafted value cannot break out of url("...") and inject its own CSS.
+    const rawBgUrl = themeAssets.bgPatternUrl?.trim() || '';
+    const bgUrl = /^(https?:\/\/|\/(?!\/)|data:image\/)/i.test(rawBgUrl)
+      ? rawBgUrl.replace(/[\\"()\n\r<]/g, ch => '%' + ch.charCodeAt(0).toString(16).padStart(2, '0').toUpperCase())
+      : '';
     const opacityVal = (backgroundOverlayOpacity ?? 75) / 100;
     const isBlurred = blurVal !== '0px';
 
@@ -250,7 +255,6 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         z-index: -20;
         background-image: ${bgUrl ? `url("${bgUrl}")` : 'none'};
         background-size: cover;
-        background-attachment: fixed;
         background-position: center;
         background-repeat: no-repeat;
         filter: blur(${blurVal});
