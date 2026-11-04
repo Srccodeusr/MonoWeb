@@ -70,6 +70,9 @@ export const AdminShell: React.FC<{ currentPage: string; onNavigate: (page: stri
   const [collapsed, setCollapsed] = useState<string[]>(loadCollapsed);
 
   useEffect(() => { setOpen(false); }, [currentPage]);
+  // The admin pages scroll inside #admin-main, not the window, so App's scrollTo(0) never reset them: opening a page
+  // from the middle of a long one left the new page scrolled down.
+  useEffect(() => { document.getElementById('admin-main')?.scrollTo({ top: 0 }); }, [currentPage]);
   useEffect(() => {
     if (!open) return;
     const prev = document.body.style.overflow; document.body.style.overflow = 'hidden';
@@ -126,7 +129,7 @@ export const AdminShell: React.FC<{ currentPage: string; onNavigate: (page: stri
   );
 
   return (
-    <div className="flex flex-col h-screen min-h-0 bg-transparent">
+    <div className="flex flex-col h-dvh min-h-0 bg-transparent">
       <header className="h-14 shrink-0 border-b border-zinc-800/80 bg-zinc-950/90 backdrop-blur-md flex items-center gap-3 px-3 sm:px-4 z-30">
         <button onClick={() => setOpen(true)} className="lg:hidden h-10 w-10 flex items-center justify-center rounded-xl border border-zinc-800 text-zinc-300 hover:text-white hover:bg-zinc-900" aria-label="Open admin menu" aria-expanded={open}><Menu className="h-5 w-5" /></button>
         <button onClick={() => onNavigate('admin-dashboard')} className="flex items-center gap-2.5 min-w-0 text-left">
@@ -145,7 +148,7 @@ export const AdminShell: React.FC<{ currentPage: string; onNavigate: (page: stri
 
       <div className="flex-1 flex min-h-0">
         <aside className="hidden lg:flex w-64 shrink-0 border-r border-zinc-800/80 bg-zinc-950/80 min-h-0">{nav}</aside>
-        <main className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden p-4 lg:p-6 flex flex-col" id="admin-main">
+        <main className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden p-4 pb-[max(1rem,env(safe-area-inset-bottom))] lg:p-6 flex flex-col" id="admin-main">
           <div className="flex-1 flex flex-col">{children}</div>
           <footer className="pt-6 mt-8 border-t border-zinc-900/80 text-[11px] text-zinc-600 font-mono">© 2025–2026 {brandName || 'Platform'} · Admin Control Panel</footer>
         </main>
@@ -154,7 +157,7 @@ export const AdminShell: React.FC<{ currentPage: string; onNavigate: (page: stri
       {open && (
         <div className="lg:hidden fixed inset-0 z-[70]" role="dialog" aria-modal="true" aria-label="Admin navigation">
           <div className="absolute inset-0 bg-black/70" onClick={() => setOpen(false)} />
-          <aside className="absolute left-0 top-0 bottom-0 w-[84%] max-w-xs bg-zinc-950 border-r border-zinc-800 flex flex-col">
+          <aside className="absolute left-0 top-0 bottom-0 w-[84%] max-w-xs bg-zinc-950 border-r border-zinc-800 flex flex-col pb-[env(safe-area-inset-bottom)]">
             <div className="h-14 shrink-0 flex items-center justify-between px-4 border-b border-zinc-800/80">
               <span className="flex items-center gap-2 text-sm font-bold text-white"><ShieldAlert className="h-4 w-4 text-amber-400" />Admin menu</span>
               <button onClick={() => setOpen(false)} className="p-2 rounded-lg text-zinc-400 hover:bg-zinc-800" aria-label="Close menu"><X className="h-4 w-4" /></button>
