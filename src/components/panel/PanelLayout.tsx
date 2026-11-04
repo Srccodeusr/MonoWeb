@@ -82,21 +82,23 @@ const Shell: React.FC<Props> = ({ currentPage, onNavigate, children }) => {
     <div className={cx('w-full mx-auto', currentPage === 'server' || currentPage === 'vps-server' ? 'max-w-7xl' : 'max-w-5xl')}>
       {/* Icon tab strip, same structure as the reference panel: Servers / Create / Upgrade / Store / Earn / Account / More */}
       <nav className="sticky top-16 z-30 -mx-4 lg:mx-0 mb-4 bg-zinc-950/85 backdrop-blur border-b border-zinc-800/80 lg:rounded-2xl lg:border" aria-label="Panel">
-        <div className="flex items-stretch justify-between sm:justify-center gap-0.5 px-1 overflow-x-auto no-scrollbar">
+        <div className="flex items-stretch gap-0.5 px-1">
+          {/* Only the tabs scroll. The More menu lives outside the scroll area, otherwise its dropdown was clipped by it. */}
+          <div className="flex flex-1 min-w-0 items-stretch justify-between sm:justify-center gap-0.5 overflow-x-auto no-scrollbar">
           {TABS.map(t => {
             const Icon = t.icon; const on = active(t);
             return (
               <button key={t.page} onClick={() => onNavigate(t.page)} aria-current={on ? 'page' : undefined}
-                className={cx('flex-1 sm:flex-none sm:min-w-[84px] flex flex-col items-center gap-0.5 px-3 py-2.5 text-[10px] font-semibold border-b-2 transition-colors', on ? 'border-amber-400 text-amber-300' : 'border-transparent text-zinc-500 hover:text-zinc-200')}>
+                className={cx('flex-1 sm:flex-none min-w-[56px] sm:min-w-[84px] flex flex-col items-center gap-0.5 px-2 sm:px-3 py-2.5 text-[10px] font-semibold border-b-2 transition-colors', on ? 'border-amber-400 text-amber-300' : 'border-transparent text-zinc-500 hover:text-zinc-200')}>
                 <Icon className="h-[18px] w-[18px]" />{t.label}
               </button>
             );
           })}
-          <div className="relative flex-1 sm:flex-none sm:min-w-[84px]">
-            <button onClick={() => setMore(m => !m)} className="w-full h-full flex flex-col items-center gap-0.5 px-3 py-2.5 text-[10px] font-semibold border-b-2 border-transparent text-zinc-500 hover:text-zinc-200"><MoreHorizontal className="h-[18px] w-[18px]" />More</button>
+          </div>
+          <div className="relative flex-none min-w-[56px] sm:min-w-[84px]">
+            <button onClick={() => setMore(m => !m)} aria-expanded={more} aria-haspopup="menu" className="w-full h-full flex flex-col items-center gap-0.5 px-3 py-2.5 text-[10px] font-semibold border-b-2 border-transparent text-zinc-500 hover:text-zinc-200"><MoreHorizontal className="h-[18px] w-[18px]" />More</button>
             {more && (
               <>
-                <div className="fixed inset-0 z-40" onClick={() => setMore(false)} />
                 <div className="absolute right-0 top-full mt-1 z-50 w-52 rounded-xl border border-zinc-800 bg-zinc-900 shadow-2xl p-1.5">
                   {MORE.map(m => { const I = m.icon; return <button key={m.page} onClick={() => { setMore(false); onNavigate(m.page); }} className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs text-zinc-300 hover:bg-zinc-800"><I className="h-4 w-4 text-zinc-500" />{m.label}</button>; })}
                   <div className="h-px bg-zinc-800 my-1" />
@@ -107,6 +109,8 @@ const Shell: React.FC<Props> = ({ currentPage, onNavigate, children }) => {
           </div>
         </div>
       </nav>
+      {/* Click-away layer: it must sit outside the nav, because the nav's backdrop-blur would confine a fixed child to the nav itself. */}
+      {more && <div className="fixed inset-0 z-20" onClick={() => setMore(false)} aria-hidden="true" />}
 
       <TopBar onNavigate={onNavigate} />
       <div className="mt-4"><PaymentWatcher />{children}</div>
