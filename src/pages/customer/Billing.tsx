@@ -193,8 +193,8 @@ export const Billing: React.FC<BillingProps> = ({ onNavigate }) => {
             No transactions found yet.
           </div>
         ) : (
-          <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 overflow-hidden">
-            <table className="w-full text-left text-xs">
+          <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 overflow-x-auto">
+            <table className="w-full min-w-[640px] text-left text-xs">
               <thead className="bg-zinc-950 border-b border-zinc-800 text-zinc-400 font-mono text-[11px]">
                 <tr>
                   <th className="p-3.5">Order ID</th>

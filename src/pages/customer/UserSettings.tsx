@@ -242,8 +242,8 @@ export const UserSettings: React.FC = () => {
     e.preventDefault();
     setPasswordMsg(null);
 
-    if (newPassword.length < 6) {
-      setPasswordMsg({ success: false, text: 'New password must be at least 6 characters.' });
+    if (newPassword.length < 8) {
+      setPasswordMsg({ success: false, text: 'New password must be at least 8 characters.' });
       return;
     }
 
@@ -260,6 +260,8 @@ export const UserSettings: React.FC = () => {
     setUpdatingPassword(false);
 
     if (res.success) {
+      // Other sessions were revoked by the server; keep this one signed in with the fresh token.
+      if (res.data?.token) { try { localStorage.setItem('aether_token', res.data.token); } catch { /* storage unavailable: the cookie still works */ } }
       setPasswordMsg({ success: true, text: 'Password successfully updated!' });
       setCurrentPassword('');
       setNewPassword('');

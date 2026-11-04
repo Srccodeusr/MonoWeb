@@ -36,8 +36,8 @@ export const ActivityLog: React.FC = () => {
           <p>Loading security audit logs...</p>
         </div>
       ) : (
-        <div className="rounded-3xl border border-zinc-800 bg-zinc-900/60 overflow-hidden">
-          <table className="w-full text-left text-xs">
+        <div className="rounded-3xl border border-zinc-800 bg-zinc-900/60 overflow-x-auto">
+          <table className="w-full min-w-[560px] text-left text-xs">
             <thead className="bg-zinc-950 border-b border-zinc-800 text-zinc-400 font-mono text-[11px]">
               <tr>
                 <th className="p-3.5">Action</th>
