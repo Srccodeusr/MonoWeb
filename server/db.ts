@@ -387,7 +387,7 @@ function defaultDb(): DatabaseSchema {
     apiAuditLogs: [],
     webhooks: [],
     legalPages: [],
-    statusComponents: defaultStatusComponents,
+    statusComponents: cloneDefaults(defaultStatusComponents),
     incidents: [],
     scheduledMaintenances: [],
     provisions: [],
@@ -435,7 +435,9 @@ export async function getDb(reload = false): Promise<DatabaseSchema> {
       const adminEmail = process.env.AETHER_ADMIN_EMAIL || 'admin@yourdomain.com';
       // No hard-coded fallback password: if none is configured we generate one and print it ONCE.
       const envPw = process.env.AETHER_ADMIN_PASSWORD;
-      const generatedPw = !envPw || envPw === 'change_me_secure_admin_password' ? crypto.randomBytes(12).toString('base64url') : '';
+      // The password that used to ship in env.example is public knowledge, so it is treated as "not configured" too.
+      const KNOWN_SAMPLE_PASSWORDS = new Set(['change_me_secure_admin_password', 'MonoPanelOPP']);
+      const generatedPw = !envPw || KNOWN_SAMPLE_PASSWORDS.has(envPw) ? crypto.randomBytes(12).toString('base64url') : '';
       const adminPassword = generatedPw || envPw!;
 
       dbCache = getStore().load() as DatabaseSchema | null;
@@ -491,7 +493,7 @@ export async function getDb(reload = false): Promise<DatabaseSchema> {
         if (!Array.isArray(dbCache.tickets)) dbCache.tickets = [];
         if (!Array.isArray(dbCache.announcements)) dbCache.announcements = [];
         if (!Array.isArray(dbCache.auditLogs)) dbCache.auditLogs = [];
-        if (!dbCache.settings) dbCache.settings = defaultSettings;
+        if (!dbCache.settings) dbCache.settings = cloneDefaults(defaultSettings);
         if (!dbCache.mail) dbCache.mail = [];
         if (!dbCache.ads) dbCache.ads = [];
         if (!dbCache.adEvents) dbCache.adEvents = [];
@@ -501,23 +503,23 @@ export async function getDb(reload = false): Promise<DatabaseSchema> {
         if (!dbCache.apiAuditLogs) dbCache.apiAuditLogs = [];
         if (!dbCache.webhooks) dbCache.webhooks = [];
         if (!dbCache.legalPages) dbCache.legalPages = [];
-        if (!dbCache.statusComponents || dbCache.statusComponents.length === 0) dbCache.statusComponents = defaultStatusComponents;
+        if (!dbCache.statusComponents || dbCache.statusComponents.length === 0) dbCache.statusComponents = cloneDefaults(defaultStatusComponents);
         if (!dbCache.incidents) dbCache.incidents = [];
         if (!dbCache.scheduledMaintenances) dbCache.scheduledMaintenances = [];
         if (!dbCache.provisions) dbCache.provisions = [];
         if (!dbCache.settings.panelIntegration) {
-          dbCache.settings.panelIntegration = defaultPanelIntegration;
+          dbCache.settings.panelIntegration = cloneDefaults(defaultPanelIntegration);
         } else {
           dbCache.settings.panelIntegration = { ...defaultPanelIntegration, ...dbCache.settings.panelIntegration };
         }
         if (!Array.isArray(dbCache.settings.quickLinks)) {
-          dbCache.settings.quickLinks = defaultQuickLinks;
+          dbCache.settings.quickLinks = cloneDefaults(defaultQuickLinks);
         }
         // Backfill the Gift Card gateway for installs saved before it existed
         if (!dbCache.settings.paymentGateways) {
-          dbCache.settings.paymentGateways = defaultSettings.paymentGateways;
+          dbCache.settings.paymentGateways = cloneDefaults(defaultSettings.paymentGateways)!;
         } else if (!dbCache.settings.paymentGateways.giftCard) {
-          dbCache.settings.paymentGateways.giftCard = defaultSettings.paymentGateways!.giftCard;
+          dbCache.settings.paymentGateways.giftCard = cloneDefaults(defaultSettings.paymentGateways!.giftCard);
         }
         // Hosting collections: seeded only when the field is MISSING (an empty list means the admin deleted them).
         if (!Array.isArray(dbCache.nodes)) dbCache.nodes = [];
@@ -592,9 +594,12 @@ export async function getDb(reload = false): Promise<DatabaseSchema> {
       }
       return dbCache;
     } catch (err) {
+      // Continuing with an empty in-memory database would overwrite the real data on the next save.
+      // Fail loudly instead and allow the next call to retry.
       console.error('[Database/CRITICAL] Failed to initialize database:', err);
-      dbCache = defaultDb();
-      return dbCache;
+      dbCache = null;
+      initPromise = null;
+      throw err;
     }
   })();
 

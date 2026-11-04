@@ -13,8 +13,13 @@ export interface AuthenticatedRequest extends Request {
   user?: User;
 }
 
+/** The session version a user's tokens must carry. Single source of truth for generateToken/verifyToken/password changes. */
+export function currentTokenVersion(user: { tokenVersion?: number }): number {
+  return user.tokenVersion !== undefined ? user.tokenVersion : 1;
+}
+
 export function generateToken(user: User): string {
-  const version = user.tokenVersion !== undefined ? user.tokenVersion : 1;
+  const version = currentTokenVersion(user);
   return jwt.sign(
     {
       id: user.id,
@@ -37,8 +42,7 @@ export async function verifyToken(token: string): Promise<User | null> {
 
     // Check token version for instant session revocation
     if (decoded.tokenVersion !== undefined) {
-      const dbVersion = user.tokenVersion !== undefined ? user.tokenVersion : 1;
-      if (decoded.tokenVersion !== dbVersion) {
+      if (decoded.tokenVersion !== currentTokenVersion(user)) {
         return null;
       }
     }
@@ -71,6 +75,15 @@ export function checkRateLimit(apiKeyId: string): boolean {
 }
 
 export async function authMiddleware(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  try {
+    await authenticate(req, res, next);
+  } catch (err) {
+    console.error('[Auth] Middleware failure:', err);
+    if (!res.headersSent) res.status(500).json({ success: false, error: { code: 'SERVER_ERROR', message: 'Authentication failed due to a server error.' } });
+  }
+}
+
+async function authenticate(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   let token = req.headers.authorization?.replace('Bearer ', '');
   if (!token && req.cookies && req.cookies.aether_token) {
     token = req.cookies.aether_token;
@@ -126,7 +139,7 @@ export async function authMiddleware(req: AuthenticatedRequest, res: Response, n
     apiKey.lastUsedIp = req.ip || req.socket.remoteAddress || 'unknown';
     apiKey.requestCount = (apiKey.requestCount || 0) + 1;
     
-    // Log API access safely (never log the key secret)
+    // Log API access safely (never log the key secret). Status codes are not known yet at this point.
     if (!db.apiAuditLogs) db.apiAuditLogs = [];
     db.apiAuditLogs.unshift({
       id: `apiaud_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`,
@@ -177,6 +190,7 @@ export async function authMiddleware(req: AuthenticatedRequest, res: Response, n
 export async function optionalUser(req: Request): Promise<User | null> {
   const token = req.headers.authorization?.replace('Bearer ', '') || (req as any).cookies?.aether_token;
   if (!token || token.startsWith('aep_') || token.startsWith('aeth_')) return null;
+  // verifyToken never throws on bad tokens, but a database hiccup must not break a public endpoint either.
   return verifyToken(token);
 }
 
