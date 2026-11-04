@@ -9,7 +9,7 @@ const ipBuckets = new Map<string, RateLimitBucket>();
 const authBuckets = new Map<string, RateLimitBucket>();
 
 // Cleanup stale buckets every 5 minutes
-setInterval(() => {
+const cleanupTimer = setInterval(() => {
   const now = Date.now();
   for (const [ip, bucket] of ipBuckets.entries()) {
     if (bucket.resetAt <= now) {
@@ -22,6 +22,7 @@ setInterval(() => {
     }
   }
 }, 5 * 60 * 1000);
+cleanupTimer.unref?.(); // never keep the process alive just for this timer
 
 /**
  * Extracts normalized client IP respecting proxy trust
@@ -37,8 +38,8 @@ export function getClientIp(req: Request): string {
  * Prevents high-frequency request flood abuse while seamlessly serving SPA navigation and monitoring polls.
  */
 export function generalApiRateLimiter(req: Request, res: Response, next: NextFunction) {
-  // Skip rate limiting for static assets and local internal communications
-  if (req.path.startsWith('/assets') || req.path.startsWith('/@') || req.path === '/api/health') {
+  // Mounted at '/api', so req.path is relative to it ('/health', not '/api/health').
+  if (req.path.startsWith('/assets') || req.path.startsWith('/@') || req.path === '/health') {
     return next();
   }
 
