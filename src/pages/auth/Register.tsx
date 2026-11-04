@@ -53,8 +53,13 @@ export const Register: React.FC<RegisterProps> = ({ onNavigate }) => {
       return;
     }
 
-    if (password.length < 6) {
-      setError('Password must be at least 6 characters.');
+    if (password.length < 8) {
+      setError('Password must be at least 8 characters.');
+      return;
+    }
+
+    if (!/^[a-zA-Z0-9_.-]{3,32}$/.test(username.trim())) {
+      setError('Username must be 3-32 characters: letters, numbers, dots, dashes or underscores.');
       return;
     }
 
