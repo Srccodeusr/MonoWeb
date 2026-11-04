@@ -77,19 +77,34 @@ import { AdminStripe } from './pages/admin/AdminStripe';
 import { VpsList } from './pages/vps/VpsList';
 import { VpsDeploy } from './pages/vps/VpsDeploy';
 import { VpsServer } from './pages/vps/VpsServer';
-import { AdminVpsOverview } from './pages/admin/vps/AdminVpsOverview';
-import { AdminVpsNodes } from './pages/admin/vps/AdminVpsNodes';
-import { AdminVpsServers } from './pages/admin/vps/AdminVpsServers';
-import { AdminVpsPlans } from './pages/admin/vps/AdminVpsPlans';
-import { AdminVpsOrders } from './pages/admin/vps/AdminVpsOrders';
-import { AdminVpsImages } from './pages/admin/vps/AdminVpsImages';
-import { AdminVpsSettings } from './pages/admin/vps/AdminVpsSettings';
-import { AdminVpsActivity } from './pages/admin/vps/AdminVpsActivity';
+import { AdminVpsOverview } from './pages/admin/AdminVpsOverview';
+import { AdminVpsNodes } from './pages/admin/AdminVpsNodes';
+import { AdminVpsServers } from './pages/admin/AdminVpsServers';
+import { AdminVpsPlans } from './pages/admin/AdminVpsPlans';
+import { AdminVpsOrders } from './pages/admin/AdminVpsOrders';
+import { AdminVpsImages } from './pages/admin/AdminVpsImages';
+import { AdminVpsSettings } from './pages/admin/AdminVpsSettings';
+import { AdminVpsActivity } from './pages/admin/AdminVpsActivity';
 
 
 /** Customer pages share one panel shell (tab strip, announcement bar, payment watcher). It stays mounted between pages. */
 const CustomerShell: React.FC<{ enabled: boolean; currentPage: string; onNavigate: (p: string, params?: any) => void; children: React.ReactNode }> = ({ enabled, currentPage, onNavigate, children }) =>
   enabled ? <PanelLayout currentPage={currentPage} onNavigate={onNavigate}>{children}</PanelLayout> : <>{children}</>;
+
+/**
+ * Where to send a signed-in user who lands on /login: only same-site paths. The value comes from the URL (?redirect=),
+ * so "//evil.com" or "/\\evil.com" must not get through (history.replaceState would also throw on a cross-origin URL).
+ */
+function safeRedirectPath(value: unknown, fallback = '/servers'): string {
+  if (typeof value !== 'string' || !value.startsWith('/') || value.startsWith('//') || value.startsWith('/\\')) return fallback;
+  try {
+    const u = new URL(value, window.location.origin);
+    if (u.origin !== window.location.origin || u.pathname === '/login' || u.pathname === '/register') return fallback;
+    return u.pathname + u.search + u.hash;
+  } catch {
+    return fallback;
+  }
+}
 
 function AppContent() {
   const { user, loading, logout } = useAuth();
@@ -106,7 +121,7 @@ function AppContent() {
   // Global Ctrl+K / Cmd+K listener
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
         setIsSearchOpen(prev => !prev);
       }
@@ -160,7 +175,7 @@ function AppContent() {
       setPageParams({ redirect: fullPath });
     } else if (user && (currentPage === 'login' || currentPage === 'register')) {
       // Authenticated user visits auth page -> return to requested path or dashboard
-      const redirectUrl = pageParams?.redirect || '/servers';
+      const redirectUrl = safeRedirectPath(pageParams?.redirect);
       window.history.replaceState({}, '', redirectUrl);
       const restored = parseUrlToRoute(redirectUrl, '');
       setCurrentPage(restored.page);
@@ -190,7 +205,7 @@ function AppContent() {
   if (maintenanceMode && user?.role !== 'admin' && user?.role !== 'super_admin') {
     if (isCustomerPage) {
       return (
-        <div className="min-h-screen bg-[#09090b] text-zinc-100 flex flex-col items-center justify-center p-6 relative font-sans select-none">
+        <div className="min-h-dvh bg-[#09090b] text-zinc-100 flex flex-col items-center justify-center p-6 relative font-sans select-none">
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[350px] h-[350px] bg-amber-500/5 rounded-full blur-[120px] pointer-events-none" />
 
           <div className="max-w-md w-full bg-zinc-900/40 border border-zinc-800/80 p-8 rounded-3xl backdrop-blur-md text-center space-y-6 relative shadow-2xl">
@@ -318,7 +333,7 @@ function AppContent() {
   const adminShell = isAdminPage && !!user;
 
   return (
-    <div className="min-h-screen max-w-full overflow-x-hidden bg-transparent text-zinc-100 flex flex-col font-sans selection:bg-amber-500 selection:text-black">
+    <div className="min-h-dvh max-w-full overflow-x-clip bg-transparent text-zinc-100 flex flex-col font-sans selection:bg-amber-500 selection:text-black">
       {/* Maintenance Mode Warning Banner for Public Pages */}
       {maintenanceMode && isPublicPage && (
         <div className="bg-amber-500 text-black py-2 px-4 text-center text-xs font-bold font-mono tracking-wide shadow-md shrink-0 flex items-center justify-center gap-2 z-50">
@@ -351,7 +366,7 @@ function AppContent() {
       <div className="flex-1 flex flex-col lg:flex-row">
 
         {/* Content Viewport */}
-        <main className="flex-1 overflow-x-hidden min-h-[calc(100vh-4rem)] flex flex-col justify-between p-4 lg:p-6">
+        <main className="flex-1 min-w-0 overflow-x-clip min-h-[calc(100dvh-4rem)] flex flex-col justify-between p-4 lg:p-6">
           <div className="flex-1 flex flex-col">
             <CustomerShell enabled={isCustomerPage && !!user} currentPage={currentPage} onNavigate={handleNavigate}>
             {pageContent}
