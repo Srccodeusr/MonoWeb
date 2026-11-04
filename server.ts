@@ -1,6 +1,9 @@
-import express, { Response } from 'express';
+// Must be the first import: other modules (db, auth, crypto) read process.env while they are being imported.
+import 'dotenv/config';
+import express, { Request, Response, NextFunction } from 'express';
+// @ts-ignore - express 4 has no types for its internal Layer; used below to forward async handler errors.
+import ExpressLayer from 'express/lib/router/layer.js';
 import path from 'path';
-import dotenv from 'dotenv';
 
 import { authMiddleware, AuthenticatedRequest } from './server/auth';
 import { getDb } from './server/db';
@@ -28,11 +31,27 @@ import { startVpsScheduler } from './server/vps/service';
 import { startHostingScheduler } from './server/hosting/serverService';
 import { generalApiRateLimiter, sensitiveAuthRateLimiter, safePayloadErrorHandler } from './server/services/requestProtection';
 
-dotenv.config();
+// Express 4 does not catch rejected promises from async route handlers: a single thrown error inside one used to
+// leave the request hanging and, on Node 22, crash the whole process (unhandled rejection). Forward them to next().
+{
+  const proto = (ExpressLayer as any).prototype;
+  proto.handle_request = function handleRequest(req: Request, res: Response, next: NextFunction) {
+    const fn = this.handle;
+    if (fn.length > 3) return next();
+    try {
+      const out = fn(req, res, next);
+      if (out && typeof out.catch === 'function') out.catch(next);
+    } catch (err) {
+      next(err);
+    }
+  };
+}
+
+process.on('unhandledRejection', (reason) => { console.error('[Platform] Unhandled promise rejection:', reason); });
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  const PORT = parseInt(process.env.PORT || '', 10) || 3000;
 
   // Reverse proxy trust. `true` (the old default) lets ANY client spoof its IP through X-Forwarded-For and
   // bypass every rate limit/ban. Default is now ONE proxy hop in production (Nginx/Caddy/Cloudflare tunnel),
@@ -68,6 +87,9 @@ async function startServer() {
 
   // General API Request Protection
   app.use('/api', generalApiRateLimiter);
+
+  // API responses are per-user: never let a browser or proxy cache them.
+  app.use('/api', (_req, res, next) => { res.setHeader('Cache-Control', 'no-store'); next(); });
 
   // Helper Cookie Parser (null-prototype object; malformed escapes no longer throw on every request)
   app.use((req, res, next) => {
@@ -117,8 +139,10 @@ async function startServer() {
       res.setHeader('Access-Control-Allow-Origin', origin);
       res.setHeader('Access-Control-Allow-Credentials', 'true');
       res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
-      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, X-API-Key');
     }
+
+    if (origin) res.setHeader('Vary', 'Origin');
 
     if (req.method === 'OPTIONS') {
       return res.sendStatus(204);
@@ -194,6 +218,14 @@ async function startServer() {
         message: `The API endpoint '${requestedPath}' does not exist on this server.`
       }
     });
+  });
+
+  // Final error handler: API errors are always JSON, and internals (stack traces, file paths) never leak.
+  app.use('/api', (err: any, req: Request, res: Response, next: NextFunction) => {
+    if (res.headersSent) return next(err);
+    console.error(`[Platform] ${req.method} ${req.originalUrl.split('?')[0]} failed:`, err);
+    const status = Number.isInteger(err?.status) && err.status >= 400 && err.status < 600 ? err.status : 500;
+    res.status(status).json({ success: false, error: { code: status === 500 ? 'SERVER_ERROR' : 'REQUEST_ERROR', message: status === 500 ? 'Something went wrong on the server.' : String(err?.message || 'Request failed.') } });
   });
 
   // Vite Integration for SPA Development and Production Serving

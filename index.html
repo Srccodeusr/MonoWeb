@@ -2,7 +2,7 @@
 <html lang="en" class="dark">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#0a0a0b" />
     <title>MonoNode — Bot Hosting &amp; VPS Hosting</title>
     <meta name="description" content="MonoNode offers high-performance Bot Hosting and VPS Hosting on reliable, low-latency infrastructure with real human support." />
@@ -64,6 +64,28 @@
     </style>
     <noscript><style>#mn-loader { display: none !important; }</style></noscript>
 
+    <script>
+      // Some browsers (in-app webviews, "block all cookies", old private modes) throw as soon as localStorage / sessionStorage
+      // is touched. Every context in the app reads it during render, so one SecurityError used to blank the whole site.
+      // Fall back to an in-memory store so the app still runs (the session just won't survive a reload).
+      (function() {
+        ['localStorage', 'sessionStorage'].forEach(function(name) {
+          var ok = true;
+          try { var s = window[name]; s.setItem('__mn_probe', '1'); s.removeItem('__mn_probe'); } catch (e) { ok = false; }
+          if (ok) return;
+          var data = {};
+          var mem = {
+            getItem: function(k) { return Object.prototype.hasOwnProperty.call(data, k) ? data[k] : null; },
+            setItem: function(k, v) { data[k] = String(v); },
+            removeItem: function(k) { delete data[k]; },
+            clear: function() { data = {}; },
+            key: function(i) { return Object.keys(data)[i] || null; },
+            get length() { return Object.keys(data).length; }
+          };
+          try { Object.defineProperty(window, name, { value: mem, configurable: true }); } catch (e) {}
+        });
+      })();
+    </script>
     <script>
       (function() {
         if (typeof window !== 'undefined') {
