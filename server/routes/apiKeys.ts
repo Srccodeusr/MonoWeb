@@ -3,6 +3,7 @@ import crypto from 'crypto';
 import { getDb, saveDbSync } from '../db';
 import { authMiddleware, requireAdmin, AuthenticatedRequest, createAuditLog, checkRateLimit } from '../auth';
 import { ApiKey, WebhookSubscription, ApiAuditLog } from '../../src/types';
+import { assertPublicHttpUrl, UnsafeUrlError } from '../utils/safeUrl';
 import { deliverWebhook } from '../webhookService';
 
 const router = Router();
@@ -463,6 +464,19 @@ router.post('/run-security-tests', authMiddleware, requireAdmin, async (req: Aut
 // WEBHOOKS SUBSCRIPTIONS (For Customer Alerts)
 // ==========================================
 
+const isStaff = (u: any) => u?.role === 'admin' || u?.role === 'super_admin';
+
+/** Finds a webhook the caller may manage (their own, or any for admins). Sends the 404 itself when there is none. */
+async function findOwnedWebhook(req: AuthenticatedRequest, res: Response) {
+  const db = await getDb();
+  const index = (db.webhooks || []).findIndex(w => w.id === req.params.id && (w.userId === req.user!.id || isStaff(req.user)));
+  if (index === -1) {
+    res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Webhook not found.' } });
+    return null;
+  }
+  return { db, index, webhook: db.webhooks[index] };
+}
+
 // GET /api/v1/api-keys/webhooks/list - List webhooks
 router.get('/webhooks/list', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
   const db = await getDb();
@@ -484,19 +498,28 @@ router.post('/webhooks/create', authMiddleware, async (req: AuthenticatedRequest
   if (!name || !name.trim()) {
     return res.status(400).json({ success: false, error: { code: 'NAME_REQUIRED', message: 'Webhook name is required.' } });
   }
-  if (!url || !url.trim() || (!url.startsWith('http://') && !url.startsWith('https://'))) {
+  if (typeof name !== 'string' || typeof url !== 'string' || !url.trim() || (!url.trim().startsWith('http://') && !url.trim().startsWith('https://'))) {
     return res.status(400).json({ success: false, error: { code: 'INVALID_URL', message: 'Valid HTTP/HTTPS endpoint URL is required.' } });
+  }
+  try {
+    await assertPublicHttpUrl(url.trim());
+  } catch (e: any) {
+    if (e instanceof UnsafeUrlError) return res.status(400).json({ success: false, error: { code: 'UNSAFE_URL', message: e.message } });
+    throw e;
   }
 
   const db = await getDb();
-  const webhookSecret = secret && secret.trim() ? secret.trim() : `whsec_${crypto.randomBytes(16).toString('hex')}`;
+  if (!isStaff(req.user) && (db.webhooks || []).filter(w => w.userId === req.user!.id).length >= 10) {
+    return res.status(400).json({ success: false, error: { code: 'WEBHOOK_LIMIT', message: 'You can register up to 10 webhooks.' } });
+  }
+  const webhookSecret = typeof secret === 'string' && secret.trim() ? secret.trim().slice(0, 200) : `whsec_${crypto.randomBytes(16).toString('hex')}`;
   const validEvents = Array.isArray(events) && events.length > 0 ? events : ['*'];
 
   const newWebhook: WebhookSubscription = {
     id: `wh_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`,
     userId: req.user!.id,
-    name: name.trim(),
-    url: url.trim(),
+    name: name.trim().slice(0, 80),
+    url: url.trim().slice(0, 500),
     secret: webhookSecret,
     events: validEvents,
     isEnabled: true,
@@ -522,11 +545,9 @@ router.post('/webhooks/create', authMiddleware, async (req: AuthenticatedRequest
 
 // POST /api/v1/api-keys/webhooks/:id/test - Test trigger webhook
 router.post('/webhooks/:id/test', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
-  const db = await getDb();
-  const webhook = (db.webhooks || []).find(w => w.id === req.params.id);
-  if (!webhook) {
-    return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Webhook not found.' } });
-  }
+  const found = await findOwnedWebhook(req, res);
+  if (!found) return;
+  const { webhook } = found;
 
   const testPayload = JSON.stringify({
     event: 'test.ping',
@@ -550,11 +571,9 @@ router.post('/webhooks/:id/test', authMiddleware, async (req: AuthenticatedReque
 
 // PATCH /api/v1/api-keys/webhooks/:id/toggle - Enable / disable webhook
 router.patch('/webhooks/:id/toggle', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
-  const db = await getDb();
-  const webhook = (db.webhooks || []).find(w => w.id === req.params.id);
-  if (!webhook) {
-    return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Webhook not found.' } });
-  }
+  const found = await findOwnedWebhook(req, res);
+  if (!found) return;
+  const { db, webhook } = found;
 
   webhook.isEnabled = !webhook.isEnabled;
   saveDbSync();
@@ -568,13 +587,9 @@ router.patch('/webhooks/:id/toggle', authMiddleware, async (req: AuthenticatedRe
 
 // DELETE /api/v1/api-keys/webhooks/:id - Delete webhook
 router.delete('/webhooks/:id', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
-  const db = await getDb();
-  const idx = (db.webhooks || []).findIndex(w => w.id === req.params.id);
-  if (idx === -1) {
-    return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Webhook not found.' } });
-  }
-
-  const webhook = db.webhooks[idx];
+  const found = await findOwnedWebhook(req, res);
+  if (!found) return;
+  const { db, index: idx, webhook } = found;
   db.webhooks.splice(idx, 1);
   saveDbSync();
 

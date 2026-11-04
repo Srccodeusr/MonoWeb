@@ -1,5 +1,6 @@
 import { Router, Response, NextFunction } from 'express';
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 import { getDb, saveDbSync } from '../db';
 import { authMiddleware, requireRole, AuthenticatedRequest, createAuditLog } from '../auth';
 import { User, Product, Plan, Coupon, Announcement, Mail } from '../../src/types';
@@ -105,6 +106,24 @@ router.get('/stats', async (req: AuthenticatedRequest, res: Response) => {
 });
 
 // --- USER MANAGEMENT ---
+const ASSIGNABLE_ROLES = ['user', 'support', 'moderator', 'admin', 'super_admin'];
+const isPrivilegedRole = (role?: string) => role === 'admin' || role === 'super_admin';
+
+/** Only a super admin may act on admin / super admin accounts; returns a message when the action is not allowed. */
+function privilegedTargetDenied(actor: AuthenticatedRequest['user'], target: { role?: string; id: string }): string | null {
+  if (actor && target.id !== actor.id && isPrivilegedRole(target.role) && actor.role !== 'super_admin') {
+    return 'Only a super admin can modify admin accounts.';
+  }
+  return null;
+}
+
+/** A finite, non-negative money amount rounded to cents, or null when the input isn't one. */
+function cleanMoney(value: unknown): number | null {
+  const n = typeof value === 'number' ? value : typeof value === 'string' && value.trim() ? Number(value) : NaN;
+  if (!Number.isFinite(n) || n < 0 || n > 1_000_000) return null;
+  return parseFloat(n.toFixed(2));
+}
+
 // GET /api/v1/admin/users
 router.get('/users', async (req: AuthenticatedRequest, res: Response) => {
   const db = await getDb();
@@ -119,6 +138,15 @@ router.post('/users', async (req: AuthenticatedRequest, res: Response) => {
   }
   if (!email || !username || !password) {
     return res.status(400).json({ success: false, error: { code: 'MISSING_FIELDS', message: 'Email, username, and password are required' } });
+  }
+  if (typeof email !== 'string' || typeof username !== 'string' || typeof password !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+    return res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: 'A valid email, username and password are required' } });
+  }
+  if (password.length < 8 || password.length > 128) {
+    return res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: 'Password must be between 8 and 128 characters.' } });
+  }
+  if (role !== undefined && !ASSIGNABLE_ROLES.includes(role)) {
+    return res.status(400).json({ success: false, error: { code: 'INVALID_ROLE', message: 'Invalid role specified' } });
   }
 
   const db = await getDb();
@@ -135,13 +163,13 @@ router.post('/users', async (req: AuthenticatedRequest, res: Response) => {
   const passwordHash = await bcrypt.hash(password, 10);
 
   const newUser: User = {
-    id: `usr_${Date.now()}`,
+    id: `usr_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`,
     email: email.trim().toLowerCase(),
     username: username.trim().toLowerCase(),
-    displayName: displayName || username.trim(),
+    displayName: (typeof displayName === 'string' && displayName.trim() ? displayName.trim() : username.trim()).slice(0, 60),
     role: role || 'user',
     plan: 'free',
-    credits: parseFloat(credits) || 0,
+    credits: cleanMoney(credits) ?? 0,
     isSuspended: false,
     emailVerified: true,
     twoFactorEnabled: false,
@@ -167,19 +195,25 @@ router.put('/users/:id', async (req: AuthenticatedRequest, res: Response) => {
 
   const { role, isSuspended, credits, displayName } = req.body;
 
-  if (role && ['user', 'support', 'moderator', 'admin', 'super_admin'].includes(role) && role !== user.role) {
+  const targetDenied = privilegedTargetDenied(req.user, user);
+  if (targetDenied) return res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: targetDenied } });
+
+  if (role && ASSIGNABLE_ROLES.includes(role) && role !== user.role) {
     const denied = roleChangeAllowed(req.user, user, role);
     if (denied) return res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: denied } });
     user.role = role;
+    user.tokenVersion = (user.tokenVersion ?? 1) + 1; // sessions must pick up the new permissions
   }
   if (typeof isSuspended === 'boolean' && user.id !== req.user!.id) {
     user.isSuspended = isSuspended;
   }
-  if (typeof credits === 'number') {
-    user.credits = credits;
+  if (credits !== undefined && credits !== null) {
+    const clean = cleanMoney(credits);
+    if (clean === null) return res.status(400).json({ success: false, error: { code: 'INVALID_AMOUNT', message: 'Credits must be a number between 0 and 1,000,000.' } });
+    user.credits = clean;
   }
-  if (displayName) {
-    user.displayName = displayName;
+  if (typeof displayName === 'string' && displayName.trim()) {
+    user.displayName = displayName.trim().slice(0, 60);
   }
 
   user.updatedAt = new Date().toISOString();
@@ -204,7 +238,7 @@ router.patch('/users/:id/role', async (req: AuthenticatedRequest, res: Response)
   const denied = roleChangeAllowed(req.user, user, role);
   if (denied) return res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: denied } });
   user.role = role;
-  user.tokenVersion = (user.tokenVersion || 1) + 1; // revoke existing sessions so the new role/permissions apply immediately
+  user.tokenVersion = (user.tokenVersion ?? 1) + 1; // revoke existing sessions so the new role/permissions apply immediately
   user.updatedAt = new Date().toISOString();
   saveDbSync();
 
@@ -222,6 +256,9 @@ router.patch('/users/:id/suspend', async (req: AuthenticatedRequest, res: Respon
     return res.status(400).json({ success: false, error: { code: 'CANNOT_SUSPEND_SELF', message: 'You cannot suspend your own account' } });
   }
 
+  const suspendDenied = privilegedTargetDenied(req.user, user);
+  if (suspendDenied) return res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: suspendDenied } });
+
   const isSuspended = typeof req.body.isSuspended === 'boolean' ? req.body.isSuspended : !user.isSuspended;
   user.isSuspended = isSuspended;
   user.updatedAt = new Date().toISOString();
@@ -238,8 +275,8 @@ router.post('/users/:id/credits', async (req: AuthenticatedRequest, res: Respons
   if (!user) return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'User not found' } });
 
   const { amount, mode } = req.body;
-  const numAmount = parseFloat(amount);
-  if (isNaN(numAmount)) {
+  const numAmount = Number(amount);
+  if (!Number.isFinite(numAmount) || Math.abs(numAmount) > 1_000_000) {
     return res.status(400).json({ success: false, error: { code: 'INVALID_AMOUNT', message: 'Valid numerical amount is required' } });
   }
 
@@ -266,8 +303,8 @@ const handleAdminPasswordReset = async (req: AuthenticatedRequest, res: Response
   }
 
   const { newPassword } = req.body;
-  if (!newPassword || newPassword.length < 6) {
-    return res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: 'Password must be at least 6 characters.' } });
+  if (typeof newPassword !== 'string' || newPassword.length < 8 || newPassword.length > 128) {
+    return res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: 'Password must be between 8 and 128 characters.' } });
   }
 
   const db = await getDb();
@@ -275,11 +312,13 @@ const handleAdminPasswordReset = async (req: AuthenticatedRequest, res: Response
   if (!user) {
     return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'User not found' } });
   }
+  // Without this a plain admin could reset a super admin's password and then log in as them.
+  const resetDenied = privilegedTargetDenied(req.user, user);
+  if (resetDenied) return res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: resetDenied } });
 
   db.passwords[user.id] = await bcrypt.hash(newPassword, 10);
   user.mustChangePassword = false;
-  const currentVer = user.tokenVersion !== undefined ? user.tokenVersion : 1;
-  user.tokenVersion = currentVer + 1;
+  user.tokenVersion = (user.tokenVersion ?? 1) + 1;
   user.updatedAt = new Date().toISOString();
   saveDbSync();
 
@@ -306,8 +345,8 @@ router.delete('/users/:id', async (req: AuthenticatedRequest, res: Response) => 
     return res.status(400).json({ success: false, error: { code: 'CANNOT_DELETE_SELF', message: 'Cannot delete your own active administrator account' } });
   }
 
-  if (user.role === 'super_admin' && req.user!.role !== 'super_admin') {
-    return res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Only a Super Admin can delete another Super Admin' } });
+  if (isPrivilegedRole(user.role) && req.user!.role !== 'super_admin') {
+    return res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Only a Super Admin can delete admin accounts' } });
   }
 
   // Clean up orphan records tied to this user
@@ -701,13 +740,28 @@ router.get('/settings', async (req: AuthenticatedRequest, res: Response) => {
 router.put('/settings', async (req: AuthenticatedRequest, res: Response) => {
   const db = await getDb();
   // Mass-assignment guard: these blocks have dedicated, validated endpoints (/admin/hosting/settings, /admin/hosting/stripe).
-  const { hosting: _h, paymentGateways: _pg, ...rest } = req.body || {};
+  const body = req.body && typeof req.body === 'object' && !Array.isArray(req.body) ? req.body : {};
+  const { hosting: _h, paymentGateways: _pg, ...rest } = body;
+  for (const key of ['__proto__', 'constructor', 'prototype']) delete (rest as any)[key];
+
+  // Social links are rendered as <a href> in the footer: only http(s) URLs may be stored (no javascript: links).
+  if (rest.socialLinks && typeof rest.socialLinks === 'object') {
+    for (const value of Object.values(rest.socialLinks)) {
+      if (typeof value === 'string' && !isValidSocialUrl(value)) {
+        return res.status(400).json({ success: false, error: { code: 'INVALID_URL', message: 'Social links must be valid http(s) URLs.' } });
+      }
+    }
+  }
+
   Object.assign(db.settings, rest);
   saveDbSync();
 
   await createAuditLog(req.user!.id, req.user!.email, req.user!.role, 'ADMIN_UPDATE_SETTINGS', 'SYSTEM', 'Updated system settings');
 
-  res.json({ success: true, data: db.settings });
+  // Same secret-stripping as GET: the response must not echo stored gateway secrets back to the browser.
+  const safe: any = JSON.parse(JSON.stringify(db.settings));
+  if (safe.paymentGateways?.stripe) { delete safe.paymentGateways.stripe.secretKey; delete safe.paymentGateways.stripe.webhookSecret; }
+  res.json({ success: true, data: safe });
 });
 
 // Helper URL validator for social links

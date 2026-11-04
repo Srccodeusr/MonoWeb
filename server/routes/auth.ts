@@ -7,8 +7,12 @@ import { generateToken, authMiddleware, createAuditLog, AuthenticatedRequest, JW
 import { User, DiscordAccount } from '../../src/types';
 import { evaluateIpRisk, AntiAbuseConfig } from '../utils/ipRiskProvider';
 import { getDiscordOAuthRedirectUri, getCurrentInstallationPublicUrl } from '../oauthUrlResolver';
+import { verifyFirebaseIdToken, FirebaseTokenError } from '../utils/firebaseVerify';
 
 const router = Router();
+
+// Pre-computed bcrypt hash of a random string, used to keep login timing constant for unknown accounts.
+const DUMMY_HASH = bcrypt.hashSync(crypto.randomBytes(16).toString('hex'), 10);
 
 // Rate limiting & abuse protection tracking
 interface LoginFailureRecord {
@@ -34,21 +38,32 @@ function getClientIp(req: any): string {
     if (simulated) return String(simulated).trim();
   }
 
-  // Only trust proxy headers when explicit reverse proxy trust is configured
-  const isTrustProxy = process.env.TRUST_PROXY === 'true' || process.env.TRUST_PROXY === '1';
-  if (isTrustProxy) {
-    const forwarded = req.headers['x-forwarded-for'];
-    if (forwarded) {
-      const ips = (typeof forwarded === 'string' ? forwarded : forwarded[0]).split(',');
-      const clientIp = ips[0].trim();
-      if (clientIp) return clientIp;
-    }
-    const realIp = req.headers['x-real-ip'];
-    if (realIp) return String(realIp).trim();
-  }
-
-  return req.socket?.remoteAddress || req.ip || '127.0.0.1';
+  // req.ip already honours the app-level "trust proxy" setting (server.ts). Reading X-Forwarded-For by hand let any
+  // client choose its own address (bypassing lockouts), and ignoring it behind a proxy put every visitor on one IP.
+  return req.ip || req.socket?.remoteAddress || '127.0.0.1';
 }
+
+// The tracking maps would otherwise grow forever (one entry per IP / identifier ever seen).
+const trackingCleanup = setInterval(() => {
+  const now = Date.now();
+  for (const map of [loginIpFailures, loginIdentifierFailures]) {
+    for (const [key, rec] of map) {
+      if (now - rec.firstFailedAt > FAILURE_WINDOW_MS && (!rec.lockedUntil || rec.lockedUntil < now)) map.delete(key);
+    }
+  }
+  for (const [key, rec] of registrationIpTrack) if (now > rec.resetAt) registrationIpTrack.delete(key);
+}, 10 * 60 * 1000);
+trackingCleanup.unref?.();
+
+const USERNAME_RE = /^[a-zA-Z0-9_.-]{3,32}$/;
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const avatarFor = (seed: string) => `https://api.dicebear.com/7.x/identicon/svg?seed=${encodeURIComponent(seed)}`;
+
+/** Escapes text for safe interpolation into an HTML document. */
+const escapeHtml = (value: unknown) => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string));
+
+/** JSON for embedding inside an inline <script>: '<' is escaped so "</script>" in a value cannot end the block. */
+const jsonForScript = (value: unknown) => JSON.stringify(value).replace(/</g, '\\u003c').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029');
 
 function checkLoginLockout(ip: string, identifier: string): { isLocked: boolean; remainingSeconds: number } {
   const now = Date.now();
@@ -187,13 +202,27 @@ router.get('/config', async (req, res) => {
 // POST /api/v1/auth/register
 router.post('/register', async (req, res) => {
   try {
-    const { username, displayName, email, password } = req.body;
+    const { username: rawUsername, displayName, email: rawEmail, password } = req.body || {};
 
-    if (!username || !email || !password) {
+    if (!rawUsername || !rawEmail || !password) {
       return res.status(400).json({
         success: false,
         error: { code: 'VALIDATION_ERROR', message: 'Username, email and password are required.' }
       });
+    }
+    if (typeof rawUsername !== 'string' || typeof rawEmail !== 'string' || typeof password !== 'string') {
+      return res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: 'Invalid registration details.' } });
+    }
+    const username = rawUsername.trim();
+    const email = rawEmail.trim();
+    if (!USERNAME_RE.test(username)) {
+      return res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: 'Username must be 3-32 characters: letters, numbers, dots, dashes or underscores.' } });
+    }
+    if (email.length > 254 || !EMAIL_RE.test(email)) {
+      return res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: 'Please enter a valid email address.' } });
+    }
+    if (password.length < 8 || password.length > 128) {
+      return res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: 'Password must be between 8 and 128 characters.' } });
     }
 
     const clientIp = getClientIp(req);
@@ -242,16 +271,16 @@ router.post('/register', async (req, res) => {
       });
     }
 
-    const userId = `usr_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`;
+    const userId = `usr_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
     const passwordHash = await bcrypt.hash(password, 10);
 
     const newUser: User = {
       id: userId,
-      username: username.trim(),
-      displayName: displayName?.trim() || username.trim(),
-      email: email.trim().toLowerCase(),
+      username,
+      displayName: (typeof displayName === 'string' && displayName.trim() ? displayName.trim() : username).slice(0, 60),
+      email: email.toLowerCase(),
       role: 'user',
-      avatarUrl: `https://api.dicebear.com/7.x/identicon/svg?seed=${username}`,
+      avatarUrl: avatarFor(username),
       isSuspended: false,
       emailVerified: true,
       twoFactorEnabled: false,
@@ -286,13 +315,16 @@ router.post('/register', async (req, res) => {
 // POST /api/v1/auth/login
 router.post('/login', async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { email, password } = req.body || {};
 
     if (!email || !password) {
       return res.status(400).json({
         success: false,
         error: { code: 'VALIDATION_ERROR', message: 'Email and password are required.' }
       });
+    }
+    if (typeof email !== 'string' || typeof password !== 'string' || email.length > 254 || password.length > 1024) {
+      return res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: 'Invalid email or password.' } });
     }
 
     const clientIp = getClientIp(req);
@@ -320,6 +352,7 @@ router.post('/login', async (req, res) => {
     const user = db.users.find(u => u.email.toLowerCase() === email.toLowerCase() || u.username.toLowerCase() === email.toLowerCase());
 
     if (!user) {
+      await bcrypt.compare(password, DUMMY_HASH); // same work as a real check so response time doesn't reveal which accounts exist
       const fail = recordLoginFailure(clientIp, email);
       if (fail.locked) {
         res.setHeader('Retry-After', fail.remainingSeconds.toString());
@@ -337,15 +370,8 @@ router.post('/login', async (req, res) => {
       });
     }
 
-    if (user.isSuspended) {
-      return res.status(403).json({
-        success: false,
-        error: { code: 'ACCOUNT_SUSPENDED', message: 'Your account has been suspended. Please contact support.' }
-      });
-    }
-
     const passwordHash = db.passwords[user.id];
-    const isMatch = await bcrypt.compare(password, passwordHash || '');
+    const isMatch = await bcrypt.compare(password, passwordHash || DUMMY_HASH) && !!passwordHash;
 
     if (!isMatch) {
       const fail = recordLoginFailure(clientIp, email);
@@ -362,6 +388,14 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({
         success: false,
         error: { code: 'INVALID_CREDENTIALS', message: 'Invalid email or password.' }
+      });
+    }
+
+    // Only someone who proved they own the account is told it is suspended (previously anyone could probe for it).
+    if (user.isSuspended) {
+      return res.status(403).json({
+        success: false,
+        error: { code: 'ACCOUNT_SUSPENDED', message: 'Your account has been suspended. Please contact support.' }
       });
     }
 
@@ -386,9 +420,9 @@ router.post('/login', async (req, res) => {
 });
 
 // POST /api/v1/auth/firebase-verify - Cryptographically verify Firebase ID token and authenticate/register user
-router.post('/firebase-verify', async (req, res) => {
+const firebaseVerifyHandler = async (req: any, res: any) => {
   try {
-    const { idToken, token: fallbackToken } = req.body;
+    const { idToken, token: fallbackToken } = req.body || {};
     const rawToken = idToken || fallbackToken;
 
     if (!rawToken || typeof rawToken !== 'string') {
@@ -413,44 +447,31 @@ router.post('/firebase-verify', async (req, res) => {
     let verifiedName = '';
     let verifiedPicture = '';
 
-    // Attempt cryptographic token decoding / claims extraction
+    // Real verification: signature (Google's certificates), issuer, audience, expiry. Never trust unsigned claims.
     try {
-      const parts = rawToken.split('.');
-      if (parts.length === 3) {
-        const payloadJson = Buffer.from(parts[1], 'base64').toString('utf-8');
-        const payload = JSON.parse(payloadJson);
-
-        if (payload.exp && payload.exp * 1000 < Date.now()) {
-          return res.status(401).json({
-            success: false,
-            error: { code: 'ID_TOKEN_EXPIRED', message: 'Firebase ID token has expired. Please re-authenticate.' }
-          });
-        }
-
-        verifiedEmail = payload.email || '';
-        verifiedGoogleId = payload.user_id || payload.sub || '';
-        verifiedName = payload.name || payload.display_name || '';
-        verifiedPicture = payload.picture || payload.photo_url || '';
+      const projectId = String(db.settings.authProviders?.google?.firebaseProjectId || process.env.VITE_FIREBASE_PROJECT_ID || '').trim();
+      const claims = await verifyFirebaseIdToken(rawToken, projectId);
+      if (!claims.emailVerified) {
+        return res.status(403).json({ success: false, error: { code: 'EMAIL_NOT_VERIFIED', message: 'Your Google account email is not verified.' } });
       }
-    } catch (parseErr) {
-      return res.status(401).json({
-        success: false,
-        error: { code: 'INVALID_ID_TOKEN', message: 'Failed to parse or verify Firebase ID token structure.' }
-      });
-    }
-
-    if (!verifiedEmail) {
-      return res.status(400).json({
-        success: false,
-        error: { code: 'EMAIL_REQUIRED', message: 'Verified email claim missing from Firebase token.' }
-      });
+      verifiedEmail = claims.email;
+      verifiedGoogleId = claims.uid;
+      verifiedName = claims.name;
+      verifiedPicture = claims.picture;
+    } catch (verifyErr: any) {
+      if (verifyErr instanceof FirebaseTokenError) {
+        const status = verifyErr.code === 'GOOGLE_NOT_CONFIGURED' ? 503 : verifyErr.code === 'EMAIL_REQUIRED' ? 400 : 401;
+        return res.status(status).json({ success: false, error: { code: verifyErr.code, message: verifyErr.message } });
+      }
+      console.error('[Auth] Firebase token verification failed:', verifyErr);
+      return res.status(502).json({ success: false, error: { code: 'VERIFICATION_UNAVAILABLE', message: 'Could not verify your Google sign-in right now. Please try again.' } });
     }
 
     const cleanEmail = verifiedEmail.trim().toLowerCase();
-    const cleanGoogleId = verifiedGoogleId || `g_${Date.now()}`;
+    const cleanGoogleId = verifiedGoogleId;
 
-    // Find existing user by googleId or email
-    let user = db.users.find(u => (u.googleId && u.googleId === cleanGoogleId) || u.email.toLowerCase() === cleanEmail);
+    // Find existing user: an already linked Google id wins, otherwise the (now verified) e-mail address
+    let user = db.users.find(u => u.googleId && u.googleId === cleanGoogleId) || db.users.find(u => u.email.toLowerCase() === cleanEmail);
 
     if (user) {
       if (user.isSuspended) {
@@ -462,6 +483,8 @@ router.post('/firebase-verify', async (req, res) => {
 
       if (!user.googleId) {
         user.googleId = cleanGoogleId;
+      } else if (user.googleId !== cleanGoogleId) {
+        return res.status(403).json({ success: false, error: { code: 'GOOGLE_ACCOUNT_MISMATCH', message: 'This email is linked to a different Google account.' } });
       }
       if (verifiedPicture && (!user.avatarUrl || user.avatarUrl.includes('dicebear'))) {
         user.avatarUrl = verifiedPicture;
@@ -505,17 +528,17 @@ router.post('/firebase-verify', async (req, res) => {
       counter++;
     }
 
-    const userId = `usr_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`;
+    const userId = `usr_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
     const randomPassword = crypto.randomBytes(32).toString('hex');
     const passwordHash = await bcrypt.hash(randomPassword, 10);
 
     const newUser: User = {
       id: userId,
       username: uniqueUsername,
-      displayName: verifiedName?.trim() || uniqueUsername,
+      displayName: (verifiedName?.trim() || uniqueUsername).slice(0, 60),
       email: cleanEmail,
       role: 'user',
-      avatarUrl: verifiedPicture || `https://api.dicebear.com/7.x/identicon/svg?seed=${uniqueUsername}`,
+      avatarUrl: verifiedPicture || avatarFor(uniqueUsername),
       isSuspended: false,
       emailVerified: true,
       twoFactorEnabled: false,
@@ -547,134 +570,12 @@ router.post('/firebase-verify', async (req, res) => {
   } catch (err: any) {
     res.status(500).json({ success: false, error: { code: 'SERVER_ERROR', message: err.message || 'Firebase token verification failed.' } });
   }
-});
+};
 
-// POST /api/v1/auth/firebase-google - Authenticate or register with Google via Firebase
-router.post('/firebase-google', async (req, res) => {
-  try {
-    const { email, displayName, photoUrl, googleId } = req.body;
-
-    if (!email) {
-      return res.status(400).json({
-        success: false,
-        error: { code: 'VALIDATION_ERROR', message: 'Email is required from Google Auth.' }
-      });
-    }
-
-    const db = await getDb();
-
-    // Check if Google Auth is enabled
-    if (db.settings.authProviders?.google?.enabled === false) {
-      return res.status(403).json({
-        success: false,
-        error: { code: 'GOOGLE_AUTH_DISABLED', message: 'Google Authentication is currently disabled by administrator.' }
-      });
-    }
-
-    const cleanEmail = email.trim().toLowerCase();
-    const cleanGoogleId = googleId || `g_${Date.now()}`;
-
-    // Find user by googleId or email
-    let user = db.users.find(u => (u.googleId && u.googleId === cleanGoogleId) || u.email.toLowerCase() === cleanEmail);
-
-    if (user) {
-      // Existing user: Link Google ID and update profile if needed
-      if (user.isSuspended) {
-        return res.status(403).json({
-          success: false,
-          error: { code: 'ACCOUNT_SUSPENDED', message: 'Your account has been suspended. Please contact support.' }
-        });
-      }
-
-      if (!user.googleId) {
-        user.googleId = cleanGoogleId;
-      }
-      if (photoUrl && (!user.avatarUrl || user.avatarUrl.includes('dicebear'))) {
-        user.avatarUrl = photoUrl;
-      }
-      user.updatedAt = new Date().toISOString();
-      saveDbSync();
-
-      const token = generateToken(user);
-      await createAuditLog(user.id, user.email, user.role, 'GOOGLE_LOGIN', 'SESSION', 'Logged in via Google Authentication');
-
-      res.cookie('aether_token', token, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax', maxAge: 7 * 86400000 });
-
-      return res.json({
-        success: true,
-        message: 'Google login successful.',
-        data: {
-          token,
-          user
-        }
-      });
-    }
-
-    // New User Registration with Google
-    if (!db.settings.registrationEnabled) {
-      return res.status(403).json({
-        success: false,
-        error: { code: 'REGISTRATION_DISABLED', message: 'New user registration is currently closed.' }
-      });
-    }
-
-    // Generate unique username from Google display name or email
-    let baseUsername = (displayName || cleanEmail.split('@')[0])
-      .toLowerCase()
-      .replace(/[^a-z0-9_]/g, '')
-      .slice(0, 16);
-    if (!baseUsername || baseUsername.length < 3) baseUsername = 'user';
-
-    let uniqueUsername = baseUsername;
-    let counter = 1;
-    while (db.users.some(u => u.username.toLowerCase() === uniqueUsername.toLowerCase())) {
-      uniqueUsername = `${baseUsername}${counter}`;
-      counter++;
-    }
-
-    const userId = `usr_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`;
-    const randomPassword = crypto.randomBytes(32).toString('hex');
-    const passwordHash = await bcrypt.hash(randomPassword, 10);
-
-    const newUser: User = {
-      id: userId,
-      username: uniqueUsername,
-      displayName: displayName?.trim() || uniqueUsername,
-      email: cleanEmail,
-      role: 'user',
-      avatarUrl: photoUrl || `https://api.dicebear.com/7.x/identicon/svg?seed=${uniqueUsername}`,
-      isSuspended: false,
-      emailVerified: true,
-      twoFactorEnabled: false,
-      authProvider: 'google',
-      googleId: cleanGoogleId,
-      plan: 'free',
-      credits: 10.0, // Welcome credit
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    };
-
-    db.users.push(newUser);
-    db.passwords[userId] = passwordHash;
-    saveDbSync();
-
-    const token = generateToken(newUser);
-    await createAuditLog(newUser.id, newUser.email, newUser.role, 'GOOGLE_REGISTER', 'ACCOUNT', 'Registered new account with Google');
-
-    res.cookie('aether_token', token, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax', maxAge: 7 * 86400000 });
-
-    return res.json({
-      success: true,
-      message: 'Account created successfully with Google.',
-      data: {
-        token,
-        user: newUser
-      }
-    });
-  } catch (err: any) {
-    res.status(500).json({ success: false, error: { code: 'SERVER_ERROR', message: err.message || 'Google authentication failed.' } });
-  }
-});
+router.post('/firebase-verify', firebaseVerifyHandler);
+// Legacy path. It used to log anyone in from an unverified e-mail address in the request body (full account takeover),
+// so it now only accepts a real Firebase ID token and runs exactly the same verification as /firebase-verify.
+router.post('/firebase-google', firebaseVerifyHandler);
 
 // GET /api/v1/auth/discord/url - Generate OAuth2 authorization URL for Discord
 router.get('/discord/url', async (req, res) => {
@@ -701,7 +602,7 @@ router.get('/discord/url', async (req, res) => {
     let linkingUserId: string | undefined;
     const authHeader = req.headers.authorization;
     const cookieToken = req.cookies?.aether_token;
-    const token = (authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : (cookieToken || req.query.token as string));
+    const token = (authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : cookieToken); // never from the query string (it would end up in logs and history)
     if (token) {
       try {
         const decoded = jwt.verify(token, JWT_SECRET) as any;
@@ -730,6 +631,10 @@ router.get('/discord/url', async (req, res) => {
 
     const authUrl = `https://discord.com/api/oauth2/authorize?${params.toString()}`;
 
+    // Bind this OAuth attempt to the browser that started it. The callback refuses a state whose nonce does not match
+    // this cookie, which stops an attacker from feeding a victim a callback link for the attacker's own Discord login.
+    res.cookie('mono_oauth_nonce', nonce, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax', maxAge: 15 * 60 * 1000, path: '/api/v1/auth/discord' });
+
     res.json({
       success: true,
       data: {
@@ -745,28 +650,22 @@ router.get('/discord/url', async (req, res) => {
 // GET /api/v1/auth/discord/callback - OAuth2 callback handler (Popup postMessage & session creation)
 router.get('/discord/callback', async (req, res) => {
   let targetOrigin = getCurrentInstallationPublicUrl(req);
-  try {
-    const db = await getDb();
-    targetOrigin = getCurrentInstallationPublicUrl(req, db.settings);
-    const { code, state, error, error_description } = req.query;
-
-    if (error) {
-      const errMsg = String(error_description || error || 'Discord authorization cancelled');
-      return res.send(`
+  const errorPage = (title: string, message: string, closeAfterMs = 2000) => res.status(400).send(`
         <!DOCTYPE html>
         <html>
-          <body style="background:#09090b;color:#f87171;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;">
-            <div style="text-align:center;">
-              <h2>Discord Authentication Cancelled</h2>
-              <p>${errMsg}</p>
+          <head><meta name="viewport" content="width=device-width, initial-scale=1"></head>
+          <body style="background:#09090b;color:#f87171;font-family:sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;padding:16px;box-sizing:border-box;">
+            <div style="text-align:center;max-width:420px;">
+              <h2>${escapeHtml(title)}</h2>
+              <p>${escapeHtml(message)}</p>
               <script>
                 (function() {
-                  var targetOrigin = ${JSON.stringify(targetOrigin)};
+                  var targetOrigin = ${jsonForScript(targetOrigin)};
                   if (window.opener) {
-                    var payload = { type: 'MONONODE_DISCORD_OAUTH_ERROR', success: false, error: ${JSON.stringify(errMsg)} };
+                    var payload = { type: 'MONONODE_DISCORD_OAUTH_ERROR', success: false, error: ${jsonForScript(message)} };
                     try { window.opener.postMessage(payload, targetOrigin); } catch (e) {}
-                    try { window.opener.postMessage({ ...payload, type: 'DISCORD_AUTH_ERROR' }, targetOrigin); } catch (e) {}
-                    setTimeout(function() { try { window.close(); } catch(e){} }, 1500);
+                    try { window.opener.postMessage({ type: 'DISCORD_AUTH_ERROR', success: false, error: ${jsonForScript(message)} }, targetOrigin); } catch (e) {}
+                    setTimeout(function() { try { window.close(); } catch(e){} }, ${closeAfterMs});
                   }
                 })();
               </script>
@@ -774,32 +673,33 @@ router.get('/discord/callback', async (req, res) => {
           </body>
         </html>
       `);
+  try {
+    const db = await getDb();
+    targetOrigin = getCurrentInstallationPublicUrl(req, db.settings);
+    const { code, state, error, error_description } = req.query;
+
+    if (error) {
+      return errorPage('Discord Authentication Cancelled', String(error_description || error || 'Discord authorization cancelled'), 1500);
     }
 
     if (!code) {
       return res.status(400).send('Missing authorization code.');
     }
 
-    // Decode state to extract authenticated user who initiated linking
+    // The state is mandatory and must belong to this browser (nonce cookie). Previously an invalid or missing state was
+    // silently ignored, which made the flow open to login-CSRF and let the session cookie decide who got linked.
     let stateUserId: string | undefined;
-    if (state) {
-      try {
-        const statePayload = jwt.verify(String(state), JWT_SECRET) as any;
-        if (statePayload?.userId) {
-          stateUserId = statePayload.userId;
-        }
-      } catch {}
+    try {
+      const statePayload = jwt.verify(String(state || ''), JWT_SECRET) as any;
+      const cookieNonce = req.cookies?.mono_oauth_nonce;
+      if (!statePayload || typeof statePayload.nonce !== 'string' || !['auth', 'link'].includes(statePayload.action) || !cookieNonce || cookieNonce !== statePayload.nonce) {
+        throw new Error('state mismatch');
+      }
+      if (statePayload.action === 'link') stateUserId = statePayload.userId || undefined;
+    } catch {
+      return errorPage('Sign-in Expired', 'This Discord sign-in request is invalid or has expired. Please close this window and try again.');
     }
-
-    // Fallback: check session cookie if stateUserId wasn't extracted
-    if (!stateUserId && req.cookies?.aether_token) {
-      try {
-        const decoded = jwt.verify(req.cookies.aether_token, JWT_SECRET) as any;
-        if (decoded?.id) {
-          stateUserId = decoded.id;
-        }
-      } catch {}
-    }
+    res.clearCookie('mono_oauth_nonce', { path: '/api/v1/auth/discord' });
 
     const discordSettings = db.settings.authProviders?.discord;
     const clientId = discordSettings?.clientId || process.env.DISCORD_CLIENT_ID;
@@ -825,29 +725,7 @@ router.get('/discord/callback', async (req, res) => {
 
     const tokenData = await tokenResponse.json();
     if (!tokenResponse.ok || !tokenData.access_token) {
-      const errMsg = tokenData.error_description || tokenData.error || 'Failed to exchange Discord authorization code.';
-      return res.send(`
-        <!DOCTYPE html>
-        <html>
-          <body style="background:#09090b;color:#f87171;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;">
-            <div style="text-align:center;">
-              <h2>Authentication Failed</h2>
-              <p>${errMsg}</p>
-              <script>
-                (function() {
-                  var targetOrigin = ${JSON.stringify(targetOrigin)};
-                  if (window.opener) {
-                    var payload = { type: 'MONONODE_DISCORD_OAUTH_ERROR', success: false, error: ${JSON.stringify(errMsg)} };
-                    try { window.opener.postMessage(payload, targetOrigin); } catch (e) {}
-                    try { window.opener.postMessage({ ...payload, type: 'DISCORD_AUTH_ERROR' }, targetOrigin); } catch (e) {}
-                    setTimeout(function() { try { window.close(); } catch(e){} }, 2000);
-                  }
-                })();
-              </script>
-            </div>
-          </body>
-        </html>
-      `);
+      return errorPage('Authentication Failed', String(tokenData.error_description || tokenData.error || 'Failed to exchange Discord authorization code.'));
     }
 
     // Fetch Discord User profile
@@ -861,18 +739,24 @@ router.get('/discord/callback', async (req, res) => {
     }
 
     const discordId = discordUser.id;
-    const discordEmail = discordUser.email ? discordUser.email.toLowerCase() : null;
+    // Discord lets people set an e-mail address they never confirmed: it may only be trusted when Discord says it is verified.
+    const discordEmail = discordUser.email && discordUser.verified === true ? String(discordUser.email).toLowerCase() : null;
     const discordUsername = discordUser.username;
     const discordAvatar = discordUser.avatar
       ? `https://cdn.discordapp.com/avatars/${discordId}/${discordUser.avatar}.png`
-      : `https://api.dicebear.com/7.x/identicon/svg?seed=${discordUsername}`;
+      : avatarFor(String(discordUsername));
 
     // Target user to link: prioritizing stateUserId (authenticated user linking account)
     let user = stateUserId ? db.users.find(u => u.id === stateUserId) : null;
+    if (stateUserId && !user) {
+      return errorPage('Account Not Found', 'The account you were signed in to no longer exists.');
+    }
 
-    // If not linking an active session, search by linked discordId or matched email
+    // Not linking from a session: use the account already linked to this Discord id, or one with the same VERIFIED e-mail.
+    // Admin accounts are never matched by e-mail alone - they must already be linked to this exact Discord account.
     if (!user) {
-      user = db.users.find(u => (u.discordId && u.discordId === discordId) || (discordEmail && u.email.toLowerCase() === discordEmail));
+      user = db.users.find(u => u.discordId && u.discordId === discordId)
+        || db.users.find(u => discordEmail && u.email.toLowerCase() === discordEmail && u.role !== 'admin' && u.role !== 'super_admin');
     }
 
     if (user) {
@@ -930,14 +814,14 @@ router.get('/discord/callback', async (req, res) => {
         <html>
           <body style="background:#09090b;color:#34d399;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;">
             <div style="text-align:center;">
-              <h2>✅ Welcome, ${user.displayName}!</h2>
+              <h2>✅ Welcome, ${escapeHtml(user.displayName)}!</h2>
               <p>Discord account authorized and linked successfully.</p>
               <script>
                 (function() {
-                  var targetOrigin = ${JSON.stringify(targetOrigin)};
-                  var userData = ${JSON.stringify(user)};
-                  var token = ${JSON.stringify(sessionToken)};
-                  var discordAccount = ${JSON.stringify(discordAccountData)};
+                  var targetOrigin = ${jsonForScript(targetOrigin)};
+                  var userData = ${jsonForScript(user)};
+                  var token = ${jsonForScript(sessionToken)};
+                  var discordAccount = ${jsonForScript(discordAccountData)};
                   if (window.opener) {
                     var payload = {
                       type: 'MONONODE_DISCORD_OAUTH_SUCCESS',
@@ -976,7 +860,7 @@ router.get('/discord/callback', async (req, res) => {
       `);
     }
 
-    let baseUsername = discordUsername.toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 16);
+    let baseUsername = String(discordUsername || '').toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 16);
     if (!baseUsername || baseUsername.length < 3) baseUsername = 'discord_user';
 
     let uniqueUsername = baseUsername;
@@ -986,14 +870,14 @@ router.get('/discord/callback', async (req, res) => {
       counter++;
     }
 
-    const userId = `usr_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`;
+    const userId = `usr_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
     const randomPassword = crypto.randomBytes(32).toString('hex');
     const passwordHash = await bcrypt.hash(randomPassword, 10);
 
     const newUser: User = {
       id: userId,
       username: uniqueUsername,
-      displayName: discordUser.global_name || discordUsername,
+      displayName: String(discordUser.global_name || discordUsername).slice(0, 60),
       email: discordEmail || `${uniqueUsername}@discord.user`,
       role: 'user',
       avatarUrl: discordAvatar,
@@ -1032,14 +916,14 @@ router.get('/discord/callback', async (req, res) => {
       <html>
         <body style="background:#09090b;color:#34d399;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;">
           <div style="text-align:center;">
-            <h2>✅ Account Created! Welcome, ${newUser.displayName}!</h2>
+            <h2>✅ Account Created! Welcome, ${escapeHtml(newUser.displayName)}!</h2>
             <p>Authenticating session...</p>
             <script>
               (function() {
-                var targetOrigin = ${JSON.stringify(targetOrigin)};
-                var userData = ${JSON.stringify(newUser)};
-                var token = ${JSON.stringify(sessionToken)};
-                var discordAccount = ${JSON.stringify(newDiscordAccount)};
+                var targetOrigin = ${jsonForScript(targetOrigin)};
+                var userData = ${jsonForScript(newUser)};
+                var token = ${jsonForScript(sessionToken)};
+                var discordAccount = ${jsonForScript(newDiscordAccount)};
                 if (window.opener) {
                   var payload = {
                     type: 'MONONODE_DISCORD_OAUTH_SUCCESS',
@@ -1061,7 +945,8 @@ router.get('/discord/callback', async (req, res) => {
       </html>
     `);
   } catch (err: any) {
-    res.status(500).send(`Authentication error: ${err.message}`);
+    console.error('[Auth] Discord callback failed:', err);
+    res.status(500).send('Authentication error. Please close this window and try again.');
   }
 });
 
@@ -1089,17 +974,24 @@ function isSafeUrl(urlStr?: string): boolean {
   if (trimmed.startsWith('javascript:') || trimmed.startsWith('data:') || trimmed.startsWith('file:') || trimmed.startsWith('vbscript:')) {
     return false;
   }
-  return trimmed.startsWith('http://') || trimmed.startsWith('https://') || trimmed.startsWith('/');
+  return trimmed.startsWith('http://') || trimmed.startsWith('https://') || (trimmed.startsWith('/') && !trimmed.startsWith('//') && !trimmed.startsWith('/\\'));
 }
 
 // PUT /api/v1/auth/profile
 router.put('/profile', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const { displayName, avatarUrl } = req.body;
+    const { displayName, avatarUrl } = req.body || {};
     const db = await getDb();
     const user = db.users.find(u => u.id === req.user?.id);
 
     if (!user) return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'User not found' } });
+
+    if ((displayName !== undefined && typeof displayName !== 'string') || (avatarUrl !== undefined && avatarUrl !== null && typeof avatarUrl !== 'string')) {
+      return res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: 'Invalid profile data.' } });
+    }
+    if (typeof avatarUrl === 'string' && avatarUrl.length > 2000) {
+      return res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: 'Avatar URL is too long.' } });
+    }
 
     if (avatarUrl) {
       if (!isSafeUrl(avatarUrl)) {
@@ -1107,7 +999,7 @@ router.put('/profile', authMiddleware, async (req: AuthenticatedRequest, res: Re
       }
       user.avatarUrl = avatarUrl.trim();
     }
-    if (displayName) user.displayName = displayName.trim();
+    if (displayName && displayName.trim()) user.displayName = displayName.trim().slice(0, 60);
     user.updatedAt = new Date().toISOString();
 
     saveDbSync();
@@ -1121,10 +1013,10 @@ router.put('/profile', authMiddleware, async (req: AuthenticatedRequest, res: Re
 // PUT & POST /api/v1/auth/change-password - User voluntary password change
 const handleChangePassword = async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const { currentPassword, newPassword, confirmPassword } = req.body;
+    const { currentPassword, newPassword, confirmPassword } = req.body || {};
 
-    if (!newPassword || newPassword.length < 6) {
-      return res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: 'New password must be at least 6 characters.' } });
+    if (typeof newPassword !== 'string' || newPassword.length < 8 || newPassword.length > 128) {
+      return res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: 'New password must be between 8 and 128 characters.' } });
     }
 
     if (confirmPassword && newPassword !== confirmPassword) {
@@ -1137,11 +1029,20 @@ const handleChangePassword = async (req: AuthenticatedRequest, res: Response) =>
 
     // If user previously set a password, verify current password
     if (currentHash) {
-      if (!currentPassword) {
+      if (typeof currentPassword !== 'string' || !currentPassword) {
         return res.status(400).json({ success: false, error: { code: 'CURRENT_PASSWORD_REQUIRED', message: 'Current password is required.' } });
+      }
+      // A stolen session must not be able to guess the current password without limit.
+      const guardKey = `chpw:${userId}`;
+      const clientIp = getClientIp(req);
+      const lock = checkLoginLockout(clientIp, guardKey);
+      if (lock.isLocked) {
+        res.setHeader('Retry-After', lock.remainingSeconds.toString());
+        return res.status(429).json({ success: false, error: { code: 'TOO_MANY_FAILED_ATTEMPTS', message: `Too many incorrect attempts. Try again in ${lock.remainingSeconds} seconds.` } });
       }
       const isMatch = await bcrypt.compare(currentPassword, currentHash);
       if (!isMatch) {
+        recordLoginFailure(clientIp, guardKey);
         return res.status(400).json({ success: false, error: { code: 'INVALID_PASSWORD', message: 'Current password is incorrect.' } });
       }
 
@@ -1155,14 +1056,19 @@ const handleChangePassword = async (req: AuthenticatedRequest, res: Response) =>
     const dbUser = db.users.find(u => u.id === userId);
     if (dbUser) {
       dbUser.mustChangePassword = false;
-      dbUser.tokenVersion = (dbUser.tokenVersion || 0) + 1;
+      // Same default as generateToken (1). The old "|| 0" made the first change land on version 1, so existing tokens stayed valid.
+      dbUser.tokenVersion = (dbUser.tokenVersion ?? 1) + 1;
       dbUser.updatedAt = new Date().toISOString();
     }
     saveDbSync();
 
     await createAuditLog(userId, req.user!.email, req.user!.role, 'CHANGE_PASSWORD', 'SECURITY', 'Password changed successfully');
 
-    res.json({ success: true, message: 'Password updated successfully.' });
+    // All other sessions are now revoked; hand this one a fresh token so the person changing the password stays signed in.
+    const freshToken = dbUser ? generateToken(dbUser) : undefined;
+    if (freshToken) res.cookie('aether_token', freshToken, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax', maxAge: 7 * 86400000 });
+
+    res.json({ success: true, message: 'Password updated successfully.', data: freshToken ? { token: freshToken } : undefined });
   } catch (err: any) {
     res.status(500).json({ success: false, error: { code: 'SERVER_ERROR', message: err.message } });
   }

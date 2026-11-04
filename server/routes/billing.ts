@@ -7,6 +7,21 @@ import { Order } from '../../src/types';
 
 const router = Router();
 
+/** Why a coupon can't be used right now (revoked / expired), or null when it is fine. */
+function couponUnusable(coupon: { status?: string; expiresAt?: string }): string | null {
+  if (coupon.status === 'revoked') return 'Invalid or expired promotional code.';
+  if (coupon.expiresAt) {
+    const t = new Date(coupon.expiresAt).getTime();
+    if (!isNaN(t) && t < Date.now()) return 'This promotional code has expired.';
+  }
+  return null;
+}
+
+/** A coupon code from untrusted input as a clean string ('' when it isn't one). */
+function cleanCode(value: unknown): string {
+  return typeof value === 'string' ? value.trim().slice(0, 64) : '';
+}
+
 // GET /api/v1/billing/orders
 router.get('/orders', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
   const db = await getDb();
@@ -16,15 +31,17 @@ router.get('/orders', authMiddleware, async (req: AuthenticatedRequest, res: Res
 
 // POST /api/v1/billing/coupons/validate - Check a coupon without redeeming it
 router.post('/coupons/validate', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
-  const { code } = req.body;
+  const code = cleanCode(req.body?.code);
   if (!code) return res.status(400).json({ success: false, error: { code: 'CODE_REQUIRED', message: 'Coupon code required' } });
 
   const db = await getDb();
-  const coupon = db.coupons.find(c => c.code.toUpperCase() === code.trim().toUpperCase() && c.isActive);
+  const coupon = db.coupons.find(c => c.code.toUpperCase() === code.toUpperCase() && c.isActive);
 
   if (!coupon) {
     return res.status(404).json({ success: false, error: { code: 'INVALID_COUPON', message: 'Invalid or expired promotional code.' } });
   }
+  const unusable = couponUnusable(coupon);
+  if (unusable) return res.status(400).json({ success: false, error: { code: 'INVALID_COUPON', message: unusable } });
 
   if (coupon.usageLimit && coupon.timesUsed >= coupon.usageLimit) {
     return res.status(400).json({ success: false, error: { code: 'COUPON_EXHAUSTED', message: 'Promotional code has reached its maximum usage limit.' } });
@@ -38,17 +55,19 @@ router.post('/coupons/validate', authMiddleware, async (req: AuthenticatedReques
 
 // POST /api/v1/billing/redeem-coupon - Validate and apply a coupon to the user's account credits
 router.post('/redeem-coupon', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
-  const { code } = req.body;
-  if (!code || !code.trim()) {
+  const code = cleanCode(req.body?.code);
+  if (!code) {
     return res.status(400).json({ success: false, error: { code: 'CODE_REQUIRED', message: 'Coupon code required' } });
   }
 
   const db = await getDb();
-  const coupon = db.coupons.find(c => c.code.toUpperCase() === code.trim().toUpperCase() && c.isActive);
+  const coupon = db.coupons.find(c => c.code.toUpperCase() === code.toUpperCase() && c.isActive);
 
   if (!coupon) {
     return res.status(404).json({ success: false, error: { code: 'INVALID_COUPON', message: 'Invalid or expired promotional code.' } });
   }
+  const unusable = couponUnusable(coupon);
+  if (unusable) return res.status(400).json({ success: false, error: { code: 'INVALID_COUPON', message: unusable } });
 
   if (coupon.usageLimit && coupon.timesUsed >= coupon.usageLimit) {
     return res.status(400).json({ success: false, error: { code: 'COUPON_EXHAUSTED', message: 'Promotional code has reached its maximum usage limit.' } });
@@ -60,7 +79,13 @@ router.post('/redeem-coupon', authMiddleware, async (req: AuthenticatedRequest, 
   // Fixed-value coupons are applied directly as account credits.
   // Percent coupons have no purchase to discount here, so they are validated but not auto-applied as credits.
   if (coupon.discountType === 'fixed') {
-    user.credits = parseFloat((user.credits + coupon.discountValue).toFixed(2));
+    // One redemption per account: without this a single fixed coupon could be redeemed in a loop for unlimited credits.
+    const redeemedBy: string[] = ((coupon as any).redeemedBy ||= []);
+    if (redeemedBy.includes(user.id)) {
+      return res.status(400).json({ success: false, error: { code: 'COUPON_ALREADY_USED', message: 'You have already redeemed this promotional code.' } });
+    }
+    redeemedBy.push(user.id);
+    user.credits = parseFloat(((user.credits || 0) + coupon.discountValue).toFixed(2));
     coupon.timesUsed = (coupon.timesUsed || 0) + 1;
     user.updatedAt = new Date().toISOString();
     saveDbSync();
@@ -104,10 +129,13 @@ router.get('/payment-methods', authMiddleware, async (req: AuthenticatedRequest,
 // paid until a human has checked the UTR / reference / gift card code.
 router.post('/add-credits', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
   const { amount, paymentMethod, transactionRef, proofUrl, methodType, giftCardType } = req.body;
-  const numAmount = parseFloat(amount);
+  const numAmount = Number(amount);
 
-  if (isNaN(numAmount) || numAmount < 1) {
+  if (!Number.isFinite(numAmount) || numAmount < 1) {
     return res.status(400).json({ success: false, error: { code: 'INVALID_AMOUNT', message: 'Minimum deposit amount is $1.00.' } });
+  }
+  if (numAmount > 100000) {
+    return res.status(400).json({ success: false, error: { code: 'INVALID_AMOUNT', message: 'Maximum deposit amount is $100,000.' } });
   }
 
   const db = await getDb();
@@ -136,7 +164,7 @@ router.post('/add-credits', authMiddleware, async (req: AuthenticatedRequest, re
     ? (giftCardType === 'playstore' ? 'playstore' : 'amazon')
     : undefined;
 
-  const ref = typeof transactionRef === 'string' ? transactionRef.trim() : '';
+  const ref = typeof transactionRef === 'string' ? transactionRef.trim().slice(0, 200) : '';
   if (!ref) {
     return res.status(400).json({
       success: false,
@@ -162,7 +190,7 @@ router.post('/add-credits', authMiddleware, async (req: AuthenticatedRequest, re
     paymentMethod: paymentMethod || 'Manual Payment',
     transactionRef: ref,
     giftCardType: resolvedGiftCardType,
-    proofUrl: proofUrl || undefined,
+    proofUrl: typeof proofUrl === 'string' && /^https?:\/\//i.test(proofUrl.trim()) ? proofUrl.trim().slice(0, 500) : undefined, // only http(s): a javascript: link would run when staff click it
     createdAt: new Date().toISOString()
   };
 
@@ -287,11 +315,15 @@ router.post('/checkout', authMiddleware, async (req: AuthenticatedRequest, res: 
     if (!coupon) {
       return res.status(404).json({ success: false, error: { code: 'INVALID_COUPON', message: 'Invalid or expired promotional code.' } });
     }
+    const couponProblem = couponUnusable(coupon);
+    if (couponProblem) {
+      return res.status(400).json({ success: false, error: { code: 'INVALID_COUPON', message: couponProblem } });
+    }
     if (coupon.usageLimit && coupon.timesUsed >= coupon.usageLimit) {
       return res.status(400).json({ success: false, error: { code: 'COUPON_EXHAUSTED', message: 'Promotional code has reached its maximum usage limit.' } });
     }
     price = coupon.discountType === 'percent'
-      ? parseFloat((price * (1 - coupon.discountValue / 100)).toFixed(2))
+      ? parseFloat((price * (1 - Math.min(100, Math.max(0, coupon.discountValue)) / 100)).toFixed(2))
       : Math.max(0, parseFloat((price - coupon.discountValue).toFixed(2)));
     appliedCoupon = coupon;
   }

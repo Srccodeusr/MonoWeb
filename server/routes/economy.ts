@@ -164,7 +164,8 @@ router.post('/store/:id/buy', wrap(async (req, res) => {
   if (!hs.economy.enabled) return err(res, 403, 'DISABLED', 'The store is closed.');
   if (item.stock && item.sold >= item.stock) return err(res, 409, 'SOLD_OUT', 'Sold out.');
   const ref = `store:${item.id}`;
-  const bought = db.coinTx.filter(t => t.userId === u.id && t.ref === ref).length;
+  // Refunded purchases (failed deliveries) don't count against the per-user limit.
+  const bought = db.coinTx.filter(t => t.userId === u.id && t.ref === ref).length - db.coinTx.filter(t => t.userId === u.id && t.ref === ref + ':refund').length;
   if (item.perUserLimit && bought >= item.perUserLimit) return err(res, 409, 'LIMIT', 'You reached the purchase limit for this item.');
 
   const payWith = req.body?.payWith === 'credits' ? 'credits' : 'coins';
@@ -186,7 +187,18 @@ router.post('/store/:id/buy', wrap(async (req, res) => {
     if ((u.coins || 0) < item.priceCoins) return err(res, 402, 'INSUFFICIENT_COINS', `You need ${item.priceCoins} ${hs.economy.coinName}.`);
     addCoins(db, u, -item.priceCoins, `Bought ${item.name}`, ref);
   }
-  const refund = () => { if (payWith === 'credits') u.credits = Math.round((u.credits + item.priceMoney) * 100) / 100; else addCoins(db, u, item.priceCoins, `Refund: ${item.name}`, ref + ':refund'); };
+  // Reserve the stock unit and the per-user purchase marker NOW, before any await below. Two parallel requests used to pass
+  // the stock / limit checks above while the first was still waiting on the node, so they could oversell or exceed the limit.
+  item.sold = (item.sold || 0) + 1;
+  const creditMarker = payWith === 'credits'
+    ? { id: newId('ctx'), userId: u.id, amount: 0, balanceAfter: u.coins || 0, reason: `Bought ${item.name} with credits`, ref, createdAt: new Date().toISOString() }
+    : null;
+  if (creditMarker) db.coinTx.unshift(creditMarker);
+  const refund = () => {
+    item.sold = Math.max(0, (item.sold || 0) - 1);
+    if (creditMarker) db.coinTx = db.coinTx.filter(t => t !== creditMarker);
+    if (payWith === 'credits') u.credits = Math.round((u.credits + item.priceMoney) * 100) / 100; else addCoins(db, u, item.priceCoins, `Refund: ${item.name}`, ref + ':refund');
+  };
 
   try {
     const now = Date.now();
@@ -209,8 +221,7 @@ router.post('/store/:id/buy', wrap(async (req, res) => {
     }
   } catch (e) { refund(); throw e; }
 
-  if (payWith === 'credits') db.coinTx.unshift({ id: newId('ctx'), userId: u.id, amount: 0, balanceAfter: u.coins || 0, reason: `Bought ${item.name} with credits`, ref, createdAt: new Date().toISOString() });
-  item.sold = (item.sold || 0) + 1; saveDbSync();
+  saveDbSync();
   await createAuditLog(u.id, u.email, u.role, 'STORE_PURCHASE', item.id, `Bought "${item.name}" with ${payWith}`);
   res.json({ success: true, data: { coins: u.coins || 0, credits: u.credits, message: item.type === 'server_pack' ? 'Server pack added. Create your boosted server from the Create page.' : 'Purchase complete.' } });
 }));
