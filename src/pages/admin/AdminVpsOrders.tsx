@@ -1,9 +1,9 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Check, RefreshCw, Search, ShoppingCart, X } from 'lucide-react';
-import { Badge, Btn, Card, Empty, PageHeader, Select, Spinner, TextInput, money, useToast } from '../../../components/ui/kit';
-import { PromptModal, ago } from '../../../components/ui/panelKit';
-import { VpsOrder } from '../../../vpsTypes';
-import { adminVps } from '../../vps/vpsApi';
+import { Badge, Btn, Card, Empty, PageHeader, Select, Spinner, TextInput, money, useToast } from '../../components/ui/kit';
+import { PromptModal, ago } from '../../components/ui/panelKit';
+import { VpsOrder } from '../../vpsTypes';
+import { adminVps } from '../vps/vpsApi';
 
 const tone = (s: string) => (s === 'fulfilled' ? 'green' : s === 'pending' ? 'amber' : s === 'paid' ? 'blue' : s === 'declined' || s === 'failed' ? 'red' : 'zinc') as 'green' | 'amber' | 'blue' | 'red' | 'zinc';
 

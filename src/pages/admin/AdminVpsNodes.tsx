@@ -1,9 +1,9 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Copy, Network, Pencil, Plus, RefreshCw, ScanSearch, Trash2, Wifi } from 'lucide-react';
-import { Badge, Btn, Card, Empty, Field, Modal, NumInput, PageHeader, Select, Spinner, TextArea, TextInput, Toggle, fmtMB, useToast } from '../../../components/ui/kit';
-import { ConfirmModal, ago } from '../../../components/ui/panelKit';
-import { VpsNode } from '../../../vpsTypes';
-import { adminVps } from '../../vps/vpsApi';
+import { Badge, Btn, Card, Empty, Field, Modal, NumInput, PageHeader, Select, Spinner, TextArea, TextInput, Toggle, fmtMB, useToast } from '../../components/ui/kit';
+import { ConfirmModal, ago } from '../../components/ui/panelKit';
+import { VpsNode } from '../../vpsTypes';
+import { adminVps } from '../vps/vpsApi';
 
 type N = Omit<VpsNode, 'secretEnc'> & { usage: { count: number; ramMb: number; diskGb: number; cpu: number } };
 const blank = { name: '', location: '', daemonHost: '', daemonPort: 3100, scheme: 'http', publicHost: '', maxVps: 20, portMin: 42000, portMax: 42999, ramMb: 0, diskGb: 0, cpus: 0, overallocatePercent: 0, enabled: true, notes: '' };

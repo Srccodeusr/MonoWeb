@@ -1,9 +1,9 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { AlertTriangle, Cloud, DollarSign, HardDrive, Network, RefreshCw, ShoppingCart, Users } from 'lucide-react';
-import { Badge, Btn, Card, PageHeader, Spinner, fmtMB, money } from '../../../components/ui/kit';
-import { ago } from '../../../components/ui/panelKit';
-import { VpsEvent } from '../../../vpsTypes';
-import { adminVps } from '../../vps/vpsApi';
+import { Badge, Btn, Card, PageHeader, Spinner, fmtMB, money } from '../../components/ui/kit';
+import { ago } from '../../components/ui/panelKit';
+import { VpsEvent } from '../../vpsTypes';
+import { adminVps } from '../vps/vpsApi';
 
 interface Overview {
   enabled: boolean; nodes: { total: number; online: number; accepting: number };

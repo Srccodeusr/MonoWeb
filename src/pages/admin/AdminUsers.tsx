@@ -48,8 +48,8 @@ export const AdminUsers: React.FC = () => {
       return;
     }
 
-    if (createPassword.length < 6) {
-      setCreateError('Password must be at least 6 characters.');
+    if (createPassword.length < 8) {
+      setCreateError('Password must be at least 8 characters.');
       return;
     }
 
@@ -141,8 +141,8 @@ export const AdminUsers: React.FC = () => {
     if (!selectedUser) return;
     setPasswordError(null);
 
-    if (newPassword.length < 6) {
-      setPasswordError('Password must be at least 6 characters.');
+    if (newPassword.length < 8) {
+      setPasswordError('Password must be at least 8 characters.');
       return;
     }
 
@@ -449,7 +449,7 @@ export const AdminUsers: React.FC = () => {
                 type="password"
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
-                placeholder="Min 6 characters"
+                placeholder="Min 8 characters"
                 className="w-full rounded-xl bg-zinc-900 border border-zinc-800 p-2.5 text-xs text-white focus:outline-none focus:border-amber-500"
               />
             </div>

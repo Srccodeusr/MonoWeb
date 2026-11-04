@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { Save, SlidersHorizontal } from 'lucide-react';
-import { Btn, Card, Field, NumInput, PageHeader, Select, Spinner, TextArea, Toggle, useToast } from '../../../components/ui/kit';
-import { VpsOsImage, VpsSettings } from '../../../vpsTypes';
-import { adminVps } from '../../vps/vpsApi';
+import { Btn, Card, Field, NumInput, PageHeader, Select, Spinner, TextArea, Toggle, useToast } from '../../components/ui/kit';
+import { VpsOsImage, VpsSettings } from '../../vpsTypes';
+import { adminVps } from '../vps/vpsApi';
 
 export const AdminVpsSettings: React.FC = () => {
   const [toast, say] = useToast(); const [s, setS] = useState<VpsSettings | null>(null); const [images, setImages] = useState<VpsOsImage[]>([]); const [saving, setSaving] = useState(false);

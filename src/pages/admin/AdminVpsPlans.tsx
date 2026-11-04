@@ -1,9 +1,9 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { EyeOff, Layers, Pencil, Plus, Star, Trash2 } from 'lucide-react';
-import { Badge, Btn, Card, Empty, Field, Modal, NumInput, PageHeader, Select, Spinner, TextInput, Toggle, fmtMB, money, useToast } from '../../../components/ui/kit';
-import { ConfirmModal } from '../../../components/ui/panelKit';
-import { VpsOsImage, VpsPlan } from '../../../vpsTypes';
-import { adminVps } from '../../vps/vpsApi';
+import { Badge, Btn, Card, Empty, Field, Modal, NumInput, PageHeader, Select, Spinner, TextInput, Toggle, fmtMB, money, useToast } from '../../components/ui/kit';
+import { ConfirmModal } from '../../components/ui/panelKit';
+import { VpsOsImage, VpsPlan } from '../../vpsTypes';
+import { adminVps } from '../vps/vpsApi';
 
 type P = VpsPlan & { inUse: number };
 const blank = { name: '', description: '', cpu: 1, ramMb: 1024, diskGb: 20, bandwidthGb: 1000, price: 5, periodDays: 30, images: [] as string[], enabled: true, isPopular: false, sort: 0, catalogPlanId: '' };

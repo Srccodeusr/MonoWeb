@@ -1,9 +1,9 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Ban, CalendarPlus, Eye, HardDrive, KeyRound, Play, Plus, RefreshCw, RotateCw, Search, Skull, Square, Trash2, UserCog, Maximize2, CheckCircle2 } from 'lucide-react';
-import { Badge, Btn, Card, Empty, Field, Modal, NumInput, PageHeader, Select, Spinner, TextInput, fmtDate, fmtMB, timeLeft, useToast } from '../../../components/ui/kit';
-import { ConfirmModal, PromptModal, ago } from '../../../components/ui/panelKit';
-import { VpsEvent, VpsOrder, VpsOsImage, VpsPlan, VpsView } from '../../../vpsTypes';
-import { STATUS_LABEL, adminVps, vpsTone } from '../../vps/vpsApi';
+import { Badge, Btn, Card, Empty, Field, Modal, NumInput, PageHeader, Select, Spinner, TextInput, fmtDate, fmtMB, timeLeft, useToast } from '../../components/ui/kit';
+import { ConfirmModal, PromptModal, ago } from '../../components/ui/panelKit';
+import { VpsEvent, VpsOrder, VpsOsImage, VpsPlan, VpsView } from '../../vpsTypes';
+import { STATUS_LABEL, adminVps, vpsTone } from '../vps/vpsApi';
 
 type Row = VpsView & { owner: { id: string; email: string; username: string } | null; nodeId: string; nodeName: string; adminNote: string; diskEnforced: boolean };
 type Detail = Row & { live: { status: string; stats: { cpuPct: number; ramUsedMb: number; diskUsedMb: number }; nodeOnline: boolean; nodeError: string | null }; events: VpsEvent[]; orders: VpsOrder[] };

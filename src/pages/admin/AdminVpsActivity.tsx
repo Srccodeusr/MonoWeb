@@ -1,9 +1,9 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { History, RefreshCw, Search } from 'lucide-react';
-import { Btn, Card, Empty, PageHeader, Select, Spinner, TextInput, useToast } from '../../../components/ui/kit';
-import { ago } from '../../../components/ui/panelKit';
-import { VpsEvent } from '../../../vpsTypes';
-import { adminVps } from '../../vps/vpsApi';
+import { Btn, Card, Empty, PageHeader, Select, Spinner, TextInput, useToast } from '../../components/ui/kit';
+import { ago } from '../../components/ui/panelKit';
+import { VpsEvent } from '../../vpsTypes';
+import { adminVps } from '../vps/vpsApi';
 
 type E = VpsEvent & { vpsName: string; ownerEmail: string };
 const ACTIONS = ['VPS_CREATED', 'ADMIN_CREATED', 'POWER_START', 'POWER_STOP', 'POWER_RESTART', 'POWER_KILL', 'SUSPENDED', 'UNSUSPENDED', 'EXPIRED', 'VPS_EXPIRED', 'EXTENDED', 'RENEWED', 'RESIZED', 'REINSTALLED', 'REINSTALL_FAILED', 'PASSWORD_RESET', 'PASSWORD_REVEALED', 'CREDENTIALS_VIEWED', 'OWNER_CHANGED', 'SSHX_STARTED'];

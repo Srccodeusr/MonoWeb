@@ -1,9 +1,9 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Disc3, Pencil, Plus, Trash2 } from 'lucide-react';
-import { Badge, Btn, Card, Empty, Field, Modal, NumInput, PageHeader, Spinner, TextInput, Toggle, useToast } from '../../../components/ui/kit';
-import { ConfirmModal } from '../../../components/ui/panelKit';
-import { VpsOsImage } from '../../../vpsTypes';
-import { adminVps } from '../../vps/vpsApi';
+import { Badge, Btn, Card, Empty, Field, Modal, NumInput, PageHeader, Spinner, TextInput, Toggle, useToast } from '../../components/ui/kit';
+import { ConfirmModal } from '../../components/ui/panelKit';
+import { VpsOsImage } from '../../vpsTypes';
+import { adminVps } from '../vps/vpsApi';
 
 type I = VpsOsImage & { inUse: number };
 export const AdminVpsImages: React.FC = () => {
