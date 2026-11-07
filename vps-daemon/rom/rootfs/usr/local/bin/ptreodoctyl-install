@@ -1,0 +1,421 @@
+#!/usr/bin/env bash
+# MonoPanel VPS System: Pterodactyl installer.
+#
+#   ptreodoctyl-install                 open the menu
+#   ptreodoctyl-install --both          1) Panel + Wings      (skips the menu)
+#   ptreodoctyl-install --panel         2) Panel only
+#   ptreodoctyl-install --wings         3) Wings only
+#   ptreodoctyl-install --configure-wings   link Wings to a Panel node and start it
+#   add --yes to accept every default (no questions). `pterodactyl-install` is the same command.
+#
+# This VPS has no systemd, so services are started with `service` and registered in /etc/mono/autostart (started again by mono-init
+# on every boot); Wings and the queue worker run under pm2. Follows the official Pterodactyl docs (Debian 11/12, Ubuntu 20.04/22.04/24.04).
+set -Eeuo pipefail
+
+PHP_VER="${PTERO_PHP_VERSION:-8.3}"
+P_HOST=""; P_EMAIL=""; P_USER=""; P_PASS=""; P_TZ="UTC"
+PANEL_DIR=/var/www/pterodactyl
+CRED_DIR=/root/.monopanel
+CRED_FILE="$CRED_DIR/credentials.txt"
+LOG_DIR=/var/log/mono
+LOG_FILE="$LOG_DIR/ptreodoctyl-install.log"
+AUTOSTART=/etc/mono/autostart
+DRY="${MONO_DRY_RUN:-0}"           # 1 = print what would happen, change nothing (used for testing the menu)
+YES=0
+MODE=""
+USE_COLOR=0; [ -t 1 ] && USE_COLOR=1
+
+# ---------------------------------------------------------------- output helpers
+c() { [ "$USE_COLOR" = 1 ] && printf '\033[%sm' "$1" || true; }
+info() { printf '%s[*]%s %s\n' "$(c 36)" "$(c 0)" "$*"; }
+ok()   { printf '%s[+]%s %s\n' "$(c 32)" "$(c 0)" "$*"; }
+warn() { printf '%s[!]%s %s\n' "$(c 33)" "$(c 0)" "$*"; }
+die()  { printf '%s[x]%s %s\n' "$(c 31)" "$(c 0)" "$*" >&2; exit 1; }
+dry()  { [ "$DRY" = 1 ]; }
+trap 'printf "%s[x]%s Failed at line %s. Full log: %s\n" "$(c 31)" "$(c 0)" "$LINENO" "$LOG_FILE" >&2' ERR
+
+usage() { sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'; }
+
+# ---------------------------------------------------------------- small utils
+rand_hex() { openssl rand -hex "$(( ${1:-16} / 2 ))"; }
+is_ip() { [[ "$1" =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}$ ]]; }
+valid_host() { [[ "$1" =~ ^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$ ]]; }
+valid_email() { [[ "$1" =~ ^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$ ]]; }
+
+# ask VAR "Question" "default" [secret]   (--yes / non-tty EOF use the default)
+ask() {
+  local var="$1" q="$2" def="${3:-}" ans=""
+  if [ "$YES" = 1 ]; then printf -v "$var" '%s' "$def"; return; fi
+  if [ -n "$def" ]; then read -r -p "$q [$def]: " ans || ans=""; else read -r -p "$q: " ans || ans=""; fi
+  printf -v "$var" '%s' "${ans:-$def}"
+}
+confirm() { # confirm "Question" default(y|n)
+  local ans="" def="${2:-n}"
+  [ "$YES" = 1 ] && { [ "$def" = y ]; return; }
+  read -r -p "$1 [$( [ "$def" = y ] && echo Y/n || echo y/N )]: " ans || ans=""
+  ans="${ans:-$def}"; [[ "$ans" =~ ^[Yy] ]]
+}
+
+detect_ip() {
+  local ip=""
+  ip="$(curl -4 -fsS --max-time 5 https://api.ipify.org 2>/dev/null || true)"
+  is_ip "$ip" || ip="$(hostname -I 2>/dev/null | awk '{print $1}')"
+  echo "${ip:-127.0.0.1}"
+}
+
+mem_limit_mb() { # RAM available to this VPS (cgroup limit, not the host's)
+  local v=""
+  for f in /sys/fs/cgroup/memory.max /sys/fs/cgroup/memory/memory.limit_in_bytes; do
+    [ -r "$f" ] && v="$(cat "$f" 2>/dev/null || true)" && break
+  done
+  if [[ "$v" =~ ^[0-9]+$ ]] && [ "$v" -lt 1099511627776 ]; then echo $(( v / 1048576 )); else free -m | awk '/^Mem:/{print $2}'; fi
+}
+
+# ---------------------------------------------------------------- the menu
+menu() {
+  [ -t 1 ] && [ "$DRY" != 1 ] && clear || true
+  printf '%s' "$(c 1)"
+  cat <<'EOF'
+  ╔════════════════════════════════════════════════════╗
+  ║                                                    ║
+  ║              MonoPanel VPS System                  ║
+  ║            Pterodactyl auto-installer              ║
+  ║                                                    ║
+  ╚════════════════════════════════════════════════════╝
+EOF
+  printf '%s' "$(c 0)"
+  cat <<'EOF'
+
+    [1]  Install Wings + Panel   (full stack on this VPS)
+    [2]  Install Panel only
+    [3]  Install Wings only
+
+    [0]  Exit
+
+EOF
+  local choice=""
+  while true; do
+    read -r -p "  Select an option [1-3]: " choice || { echo; exit 1; }
+    case "$choice" in
+      1) MODE=both;  return ;;
+      2) MODE=panel; return ;;
+      3) MODE=wings; return ;;
+      0|q|Q) echo "Bye."; exit 0 ;;
+      *) warn "Please type 1, 2, 3 or 0." ;;
+    esac
+  done
+}
+
+# ---------------------------------------------------------------- pre-flight
+need_root() {
+  [ "$DRY" = 1 ] && return
+  if [ "$(id -u)" != 0 ]; then
+    command -v sudo >/dev/null && exec sudo -E "$0" "$@"
+    die "Run as root."
+  fi
+}
+
+preflight() {
+  dry && { info "[dry-run] pre-flight checks skipped"; return; }
+  [ -r /etc/os-release ] || die "Cannot detect the OS."
+  # shellcheck disable=SC1091
+  . /etc/os-release
+  case "${ID:-}:${VERSION_ID:-}" in
+    ubuntu:20.04|ubuntu:22.04|ubuntu:24.04|debian:11|debian:12) ;;
+    *) warn "${PRETTY_NAME:-This OS} is not one Pterodactyl documents. Continuing anyway." ;;
+  esac
+  case "$(uname -m)" in x86_64|aarch64|arm64) ;; *) die "Unsupported CPU architecture: $(uname -m)" ;; esac
+  curl -fsS --max-time 15 -o /dev/null https://github.com || die "No internet access (cannot reach github.com)."
+  mkdir -p "$LOG_DIR" /etc/mono "$CRED_DIR"; chmod 700 "$CRED_DIR"; touch "$AUTOSTART"
+  if [ "$MODE" != wings ]; then
+    local mb; mb="$(mem_limit_mb)"
+    [ "${mb:-0}" -ge 1024 ] || warn "This VPS has about ${mb} MB RAM. The Panel (PHP + MariaDB + Redis) wants 1 GB or more; the install may be slow or fail."
+  fi
+}
+
+DOCKER_OK=1
+check_docker() {
+  dry && { info "[dry-run] docker check skipped"; return; }
+  local i
+  for i in $(seq 1 20); do docker info >/dev/null 2>&1 && { DOCKER_OK=1; ok "Docker is running."; return; }; [ -e "$LOG_DIR/docker.unavailable" ] && break; sleep 1; done
+  DOCKER_OK=0
+  warn "Docker is installed but its daemon is not running inside this VPS."
+  [ -r "$LOG_DIR/docker.unavailable" ] && warn "$(cat "$LOG_DIR/docker.unavailable")"
+  warn "Wings needs a working Docker. Ask your host to enable sysbox-runc (or privileged VPSes) on this node."
+  confirm "Install anyway (Wings will be installed but not started)?" n || die "Cancelled."
+}
+
+# ---------------------------------------------------------------- package helpers
+apt_i() { DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends -o Dpkg::Options::=--force-confold "$@"; }
+autostart_add() { grep -qxF "$1" "$AUTOSTART" 2>/dev/null || echo "$1" >> "$AUTOSTART"; }
+start_service() { service "$1" restart >/dev/null 2>&1 || service "$1" start; }
+
+# ---------------------------------------------------------------- Panel
+render_nginx_conf() { # render_nginx_conf <host> <php-version>   (HTTP only; add TLS later with certbot or a reverse proxy)
+  sed -e "s|@@HOST@@|$1|g" -e "s|@@PHP@@|$2|g" <<'NGINX'
+server {
+    listen 80;
+    server_name @@HOST@@;
+
+    root /var/www/pterodactyl/public;
+    index index.html index.htm index.php;
+    charset utf-8;
+
+    location / {
+        try_files $uri $uri/ /index.php?$query_string;
+    }
+
+    location = /favicon.ico { access_log off; log_not_found off; }
+    location = /robots.txt  { access_log off; log_not_found off; }
+
+    access_log off;
+    error_log  /var/log/nginx/pterodactyl.app-error.log error;
+
+    client_max_body_size 100m;
+    client_body_timeout 120s;
+    sendfile off;
+
+    location ~ \.php$ {
+        fastcgi_split_path_info ^(.+\.php)(/.+)$;
+        fastcgi_pass unix:/run/php/php@@PHP@@-fpm.sock;
+        fastcgi_index index.php;
+        include /etc/nginx/fastcgi_params;
+        fastcgi_param PHP_VALUE "upload_max_filesize = 100M \n post_max_size=100M";
+        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+        fastcgi_param HTTP_PROXY "";
+        fastcgi_intercept_errors off;
+        fastcgi_buffer_size 16k;
+        fastcgi_buffers 4 16k;
+        fastcgi_connect_timeout 300;
+        fastcgi_send_timeout 300;
+        fastcgi_read_timeout 300;
+    }
+
+    location ~ /\.ht {
+        deny all;
+    }
+}
+NGINX
+}
+
+install_php() {
+  # shellcheck disable=SC1091
+  . /etc/os-release
+  if ! apt-cache show "php${PHP_VER}-fpm" >/dev/null 2>&1; then
+    info "PHP ${PHP_VER} is not in the default repositories; adding the maintained PHP repository..."
+    case "$ID" in
+      ubuntu) apt_i software-properties-common; LC_ALL=C.UTF-8 add-apt-repository -y ppa:ondrej/php ;;
+      debian) curl -fsSL https://packages.sury.org/php/apt.gpg -o /etc/apt/trusted.gpg.d/php.gpg
+              echo "deb https://packages.sury.org/php/ ${VERSION_CODENAME} main" > /etc/apt/sources.list.d/php.list ;;
+      *) die "Cannot add a PHP ${PHP_VER} repository on ${ID}." ;;
+    esac
+    apt-get update -y
+  fi
+  # no "php${PHP_VER}" meta package: it can pull in apache2 instead of php-fpm
+  apt_i "php${PHP_VER}-cli" "php${PHP_VER}-fpm" "php${PHP_VER}-common" "php${PHP_VER}-gd" "php${PHP_VER}-mysql" \
+        "php${PHP_VER}-mbstring" "php${PHP_VER}-bcmath" "php${PHP_VER}-xml" "php${PHP_VER}-curl" "php${PHP_VER}-zip" "php${PHP_VER}-intl"
+}
+
+install_panel() {
+  if dry; then info "[dry-run] would install the Pterodactyl Panel (host=$P_HOST email=$P_EMAIL user=$P_USER)"; return; fi
+  if [ -f "$PANEL_DIR/.env" ]; then warn "The Panel is already installed in $PANEL_DIR. Skipping."; return; fi
+
+  info "Installing Panel dependencies (nginx, MariaDB, Redis, PHP ${PHP_VER}, Composer). This takes a few minutes..."
+  apt-get update -y
+  apt_i curl ca-certificates gnupg tar unzip git cron openssl
+  install_php
+  apt_i nginx mariadb-server redis-server
+  if ! command -v composer >/dev/null; then
+    curl -fsSL https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
+  fi
+
+  info "Starting MariaDB and Redis..."
+  start_service mariadb || start_service mysql
+  start_service redis-server
+  local i; for i in $(seq 1 30); do mysqladmin ping --silent >/dev/null 2>&1 && break; sleep 1; done
+  mysqladmin ping --silent >/dev/null 2>&1 || die "MariaDB did not start. See /var/log/mysql/."
+  if [ -x /etc/init.d/mariadb ]; then autostart_add mariadb; else autostart_add mysql; fi
+  autostart_add redis-server
+
+  info "Creating the database..."
+  DB_NAME=panel; DB_USER=pterodactyl; DB_PASS="$(rand_hex 24)"
+  mysql -u root <<SQL
+CREATE USER IF NOT EXISTS '${DB_USER}'@'127.0.0.1' IDENTIFIED BY '${DB_PASS}';
+ALTER USER '${DB_USER}'@'127.0.0.1' IDENTIFIED BY '${DB_PASS}';
+CREATE DATABASE IF NOT EXISTS ${DB_NAME};
+GRANT ALL PRIVILEGES ON ${DB_NAME}.* TO '${DB_USER}'@'127.0.0.1' WITH GRANT OPTION;
+FLUSH PRIVILEGES;
+SQL
+
+  info "Downloading the Panel..."
+  mkdir -p "$PANEL_DIR"; cd "$PANEL_DIR"
+  curl -fsSL -o panel.tar.gz https://github.com/pterodactyl/panel/releases/latest/download/panel.tar.gz
+  tar -xzf panel.tar.gz; rm -f panel.tar.gz
+  chmod -R 755 storage/* bootstrap/cache/
+  cp .env.example .env
+
+  info "Installing PHP dependencies with Composer..."
+  COMPOSER_ALLOW_SUPERUSER=1 composer install --no-dev --optimize-autoloader --no-interaction
+  php artisan key:generate --force
+
+  info "Configuring the Panel..."
+  local env_args=(--author="$P_EMAIL" --url="http://${P_HOST}" --timezone="$P_TZ" --cache=redis --session=redis --queue=redis
+                  --redis-host=127.0.0.1 --redis-pass=null --redis-port=6379 --settings-ui=true)
+  # --telemetry only exists on newer Panel releases, so try with it first and fall back.
+  php artisan p:environment:setup "${env_args[@]}" --telemetry=false \
+    || php artisan p:environment:setup "${env_args[@]}"
+  php artisan p:environment:database --host=127.0.0.1 --port=3306 --database="$DB_NAME" --username="$DB_USER" --password="$DB_PASS"
+  php artisan migrate --seed --force
+  php artisan p:user:make --email="$P_EMAIL" --username="$P_USER" --name-first="Mono" --name-last="Admin" --password="$P_PASS" --admin=1
+
+  chown -R www-data:www-data "$PANEL_DIR"
+
+  info "Setting up nginx, cron and the queue worker..."
+  render_nginx_conf "$P_HOST" "$PHP_VER" > /etc/nginx/sites-available/pterodactyl.conf
+  ln -sf /etc/nginx/sites-available/pterodactyl.conf /etc/nginx/sites-enabled/pterodactyl.conf
+  rm -f /etc/nginx/sites-enabled/default
+  echo "* * * * * root php $PANEL_DIR/artisan schedule:run >> /dev/null 2>&1" > /etc/cron.d/pterodactyl
+  chmod 644 /etc/cron.d/pterodactyl
+
+  # Queue worker under pm2 (no systemd here). setpriv drops to www-data without forking, so pm2 can stop it cleanly.
+  cat > /usr/local/bin/pteroq-run <<'PTEROQ'
+#!/bin/bash
+cd /var/www/pterodactyl || exit 1
+exec setpriv --reuid=www-data --regid=www-data --init-groups php artisan queue:work --queue=high,standard,low --sleep=3 --tries=3
+PTEROQ
+  chmod 755 /usr/local/bin/pteroq-run
+
+  start_service "php${PHP_VER}-fpm"
+  nginx -t
+  start_service nginx
+  start_service cron
+  autostart_add "php${PHP_VER}-fpm"; autostart_add nginx; autostart_add cron
+
+  pm2 delete pteroq >/dev/null 2>&1 || true
+  pm2 start /usr/local/bin/pteroq-run --name pteroq --interpreter none
+  pm2 save
+
+  umask 077
+  {
+    echo "MonoPanel VPS System: Pterodactyl Panel ($(date -u +%FT%TZ))"
+    echo "URL:            http://${P_HOST}"
+    echo "Admin email:    ${P_EMAIL}"
+    echo "Admin username: ${P_USER}"
+    echo "Admin password: ${P_PASS}"
+    echo "Database:       ${DB_NAME} / ${DB_USER} / ${DB_PASS}  (127.0.0.1:3306)"
+    echo "APP_KEY:        $(grep '^APP_KEY=' "$PANEL_DIR/.env" | cut -d= -f2-)   (back this up: encrypted data is unreadable without it)"
+  } > "$CRED_FILE"
+  ok "Panel installed. Details saved to $CRED_FILE (root only)."
+}
+
+# ---------------------------------------------------------------- Wings
+install_wings() {
+  if dry; then info "[dry-run] would install Wings (docker ok=$DOCKER_OK)"; return; fi
+  local arch; case "$(uname -m)" in x86_64) arch=amd64 ;; aarch64|arm64) arch=arm64 ;; *) die "Unsupported architecture $(uname -m)" ;; esac
+  info "Downloading Wings..."
+  mkdir -p /etc/pterodactyl /var/lib/pterodactyl/volumes /var/lib/pterodactyl/archive /var/lib/pterodactyl/backups /var/log/pterodactyl /tmp/pterodactyl
+  curl -fsSL -o /usr/local/bin/wings "https://github.com/pterodactyl/wings/releases/latest/download/wings_linux_${arch}"
+  chmod u+x /usr/local/bin/wings
+  ok "Wings installed at /usr/local/bin/wings ($(/usr/local/bin/wings --version 2>/dev/null | head -n1 || echo unknown version))."
+}
+
+configure_wings() { # link Wings to a node created in the Panel, then start it under pm2
+  if dry; then info "[dry-run] would ask for Panel URL / token / node id, run 'wings configure' and start Wings under pm2"; return; fi
+  [ -x /usr/local/bin/wings ] || die "Wings is not installed. Run ptreodoctyl-install and choose option 1 or 3."
+  local url token node
+  echo
+  info "In the Panel: Admin > Nodes > (your node) > Configuration > \"Generate Token\". Then enter:"
+  ask url   "Panel URL (e.g. http://panel.example.com)" ""
+  ask token "Application token (ptla_... / ptlc_...)" ""
+  ask node  "Node ID" "1"
+  [ -n "$url" ] && [ -n "$token" ] || die "Panel URL and token are required."
+  [[ "$node" =~ ^[0-9]+$ ]] || die "Node ID must be a number."
+  mkdir -p /etc/pterodactyl && cd /etc/pterodactyl
+  /usr/local/bin/wings configure --panel-url "$url" --token "$token" --node "$node" || die "wings configure failed. Check the URL/token, or paste the config from the Panel into /etc/pterodactyl/config.yml."
+  start_wings
+}
+
+start_wings() {
+  [ -f /etc/pterodactyl/config.yml ] || { warn "Wings has no /etc/pterodactyl/config.yml yet, so it was not started."; return; }
+  docker info >/dev/null 2>&1 || { warn "Docker is not running in this VPS, so Wings was not started."; return; }
+  pm2 delete wings >/dev/null 2>&1 || true
+  pm2 start /usr/local/bin/wings --name wings --interpreter none
+  pm2 save
+  ok "Wings is running under pm2 (pm2 logs wings)."
+}
+
+# ---------------------------------------------------------------- summary
+summary() {
+  echo
+  printf '%s  MonoPanel VPS System: done%s\n' "$(c 1)" "$(c 0)"
+  echo "  ------------------------------------------------------------"
+  if [ "$MODE" != wings ]; then
+    echo "  Panel:   http://${P_HOST}"
+    echo "  Login:   ${P_EMAIL}  /  (password saved in $CRED_FILE)"
+  fi
+  if [ "$MODE" != panel ]; then
+    echo "  Wings:   /usr/local/bin/wings (not started until it is linked to a Panel node)"
+    echo "  Next:    1) Panel > Admin > Nodes > Create New, then Configuration > Generate Token"
+    echo "           2) run: ptreodoctyl-install --configure-wings"
+  fi
+  echo
+  echo "  Ports: this VPS publishes only its SSH port to the internet. To reach the Panel (80), Wings (8080, 2022) or game ports"
+  echo "  from outside, your host must publish them. Until then use an SSH tunnel, e.g.:"
+  echo "      ssh -L 8000:localhost:80 root@<host> -p <ssh-port>      then open http://localhost:8000"
+  echo "  Services: nginx, php-fpm, mariadb, redis, cron start via 'service'; wings and pteroq run under pm2 (pm2 ls). Log: $LOG_FILE"
+  echo
+}
+
+# ---------------------------------------------------------------- main
+main() {
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --both|--panel|--wings|--configure-wings) MODE="${1#--}" ;;
+      --yes|-y) YES=1 ;;
+      -h|--help) usage; exit 0 ;;
+      *) die "Unknown option: $1 (try --help)" ;;
+    esac
+    shift
+  done
+
+  need_root "${ORIG_ARGS[@]}"
+  [ -n "$MODE" ] || menu
+  [ "$MODE" = configure-wings ] && { mkdir -p "$LOG_DIR"; configure_wings; exit 0; }
+
+  preflight
+  [ "$MODE" != panel ] && check_docker
+
+  # Questions (only the Panel needs any); every one has a default and can be preset with PTERO_* variables.
+  P_HOST="${PTERO_FQDN:-}"; P_EMAIL="${PTERO_EMAIL:-}"; P_USER="${PTERO_USER:-}"; P_PASS="${PTERO_PASSWORD:-}"; P_TZ="${PTERO_TZ:-UTC}"
+  if [ "$MODE" != wings ]; then
+    echo
+    info "A few quick questions (press Enter to accept the default)."
+    local def_host; dry && def_host=127.0.0.1 || def_host="$(detect_ip)"
+    [ -n "$P_HOST" ]  || ask P_HOST  "Panel domain or IP" "$def_host"
+    [ -n "$P_EMAIL" ] || ask P_EMAIL "Admin email" "admin@monopanel.local"
+    [ -n "$P_USER" ]  || ask P_USER  "Admin username" "admin"
+    [ -n "$P_PASS" ]  || { P_PASS="$(rand_hex 20)"; [ "$YES" = 1 ] || { read -r -s -p "Admin password [Enter = generate one]: " ans || ans=""; echo; P_PASS="${ans:-$P_PASS}"; }; }
+    valid_host "$P_HOST"   || die "Invalid domain/IP: $P_HOST"
+    valid_email "$P_EMAIL" || die "Invalid email: $P_EMAIL"
+    [[ "$P_USER" =~ ^[A-Za-z0-9_.-]{1,40}$ ]] || die "Username may only contain letters, digits, . _ -"
+    [ "${#P_PASS}" -ge 8 ] || die "The admin password must be at least 8 characters."
+    echo
+  fi
+
+  dry || { mkdir -p "$LOG_DIR"; exec > >(tee -a "$LOG_FILE") 2>&1; }
+  info "Starting: $( case "$MODE" in both) echo 'Wings + Panel';; panel) echo 'Panel only';; wings) echo 'Wings only';; esac ). Log: $LOG_FILE"
+
+  case "$MODE" in
+    both)  install_panel; install_wings ;;
+    panel) install_panel ;;
+    wings) install_wings ;;
+  esac
+  summary
+
+  if [ "$MODE" = wings ] && ! dry && [ "$DOCKER_OK" = 1 ] && confirm "Do you already have a node token from your Panel? Link Wings now?" n; then
+    configure_wings
+  fi
+}
+
+ORIG_ARGS=("$@")
+main "$@"
