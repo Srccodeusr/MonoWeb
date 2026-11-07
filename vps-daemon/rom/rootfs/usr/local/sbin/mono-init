@@ -1,0 +1,35 @@
+#!/bin/bash
+# MonoPanel VPS boot script (runs under tini, docker --init). sshd stays the foreground process, exactly like the old image,
+# so anything that goes wrong in the extras below can never lock a customer out of SSH.
+export HOME=/root
+mkdir -p /run/sshd /var/log/mono /etc/mono
+ssh-keygen -A >/dev/null 2>&1
+
+# Docker daemon: restarted if it dies, but we give up after 3 quick failures (it can't run without sysbox-runc / a privileged node).
+if command -v dockerd >/dev/null 2>&1; then
+  (
+    fails=0; rm -f /var/log/mono/docker.unavailable
+    while [ "$fails" -lt 3 ]; do
+      started=$(date +%s)
+      dockerd >>/var/log/mono/dockerd.log 2>&1
+      if [ $(( $(date +%s) - started )) -lt 20 ]; then fails=$((fails + 1)); else fails=0; fi
+      sleep 3
+    done
+    echo "dockerd could not start in this VPS. The node needs OCI_RUNTIME=sysbox-runc (recommended) or VPS_PRIVILEGED=true. See /var/log/mono/dockerd.log" > /var/log/mono/docker.unavailable
+  ) &
+fi
+
+# Services the installer registered (mariadb, redis, php-fpm, nginx, cron...), then pm2 apps (wings, pteroq).
+(
+  if [ -s /etc/mono/autostart ]; then
+    while read -r svc; do
+      [ -n "$svc" ] && service "$svc" start >>/var/log/mono/autostart.log 2>&1
+    done < /etc/mono/autostart
+  fi
+  if [ -s /root/.pm2/dump.pm2 ]; then
+    for _ in $(seq 1 30); do docker info >/dev/null 2>&1 && break; [ -e /var/log/mono/docker.unavailable ] && break; sleep 1; done
+    pm2 resurrect >>/var/log/mono/autostart.log 2>&1
+  fi
+) &
+
+exec /usr/sbin/sshd -D -e
