@@ -5,7 +5,7 @@
 // disk/VPS counts in /v1/system, create() reports whether the disk quota is enforced, optional custom base image.
 const fs = require('fs'), os = require('os'), path = require('path'), http = require('http'), https = require('https'), crypto = require('crypto');
 
-const VERSION = '1.1.0';
+const VERSION = '1.2.0';
 
 (function loadEnv() {
   const f = path.join(process.cwd(), '.env');
@@ -23,7 +23,8 @@ const env = (k, d = '') => (process.env[k] ?? d).trim();
 const cfg = {
   secret: env('DAEMON_SECRET'), host: env('DAEMON_HOST', '0.0.0.0'), port: parseInt(env('DAEMON_PORT', '3100'), 10),
   allowed: env('ALLOWED_IPS').split(',').map(s => s.trim()).filter(Boolean),
-  tlsCert: env('TLS_CERT'), tlsKey: env('TLS_KEY'), runtime: env('RUNTIME', 'docker'), ociRuntime: env('OCI_RUNTIME'),
+  tlsCert: env('TLS_CERT'), tlsKey: env('TLS_KEY'), runtime: env('RUNTIME', 'docker'), ociRuntime: env('OCI_RUNTIME'), privileged: /^(1|true|yes)$/i.test(env('VPS_PRIVILEGED')),
+  prebuild: env('PREBUILD_OS').split(',').map(s => s.trim()).filter(Boolean),
   basePrefixes: env('ALLOWED_BASE_PREFIXES', 'ubuntu:,debian:').split(',').map(s => s.trim()).filter(Boolean),
   dataDir: path.resolve(env('DATA_DIR', './data')),
 };
@@ -137,4 +138,8 @@ const handler = async (req, res) => {
   }
 };
 const server = cfg.tlsCert && cfg.tlsKey ? https.createServer({ cert: fs.readFileSync(cfg.tlsCert), key: fs.readFileSync(cfg.tlsKey) }, handler) : http.createServer(handler);
-server.listen(cfg.port, cfg.host, () => console.log(`[monovps] daemon v${VERSION} listening on ${cfg.tlsCert ? 'https' : 'http'}://${cfg.host}:${cfg.port} (runtime: ${rt.kind})`));
+server.listen(cfg.port, cfg.host, () => {
+  console.log(`[monovps] daemon v${VERSION} listening on ${cfg.tlsCert ? 'https' : 'http'}://${cfg.host}:${cfg.port} (runtime: ${rt.kind})`);
+  if (cfg.privileged && !cfg.ociRuntime) console.warn('[monovps] VPS_PRIVILEGED=true: every VPS runs privileged (Docker works inside, but a VPS root user can escape to this host). Prefer OCI_RUNTIME=sysbox-runc.');
+  if (rt.prebuild && cfg.prebuild.length) rt.prebuild(cfg.prebuild);
+});

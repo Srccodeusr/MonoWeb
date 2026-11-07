@@ -15,11 +15,16 @@ const { execFile } = require('child_process');
 const crypto = require('crypto');
 const posix = require('path').posix;
 
-const IMAGE_REV = '2';
+const fs = require('fs');
+const path = require('path');
+
+// Image revision 3 = the MonoPanel ROM (rom/Dockerfile): Docker, Node.js, pm2, build tools, ptreodoctyl-install. Bump to force rebuilds.
+const IMAGE_REV = '3';
+const ROM_DIR = path.join(__dirname, '..', 'rom');
 const OS = { 'ubuntu-20.04': 'ubuntu:20.04', 'ubuntu-22.04': 'ubuntu:22.04', 'ubuntu-24.04': 'ubuntu:24.04', 'debian-11': 'debian:11', 'debian-12': 'debian:12' };
 const run = (args, o = {}) => new Promise((res, rej) => {
-  const p = execFile('docker', args, { maxBuffer: 8 * 1024 * 1024, timeout: o.timeout || 60000, encoding: 'buffer' }, (e, out, err) => {
-    if (e && !o.soft) { const m = String(err || e.message).trim().split('\n').pop(); const x = new Error(m || 'docker failed'); x.out = out; return rej(x); }
+  const p = execFile('docker', args, { maxBuffer: o.maxBuffer || 8 * 1024 * 1024, timeout: o.timeout || 60000, encoding: 'buffer' }, (e, out, err) => {
+    if (e && !o.soft) { const m = String(err || e.message).trim().split('\n').slice(-(o.tail || 1)).join(' | '); const x = new Error(m || 'docker failed'); x.out = out; return rej(x); }
     res({ out, text: out.toString('utf8'), err: err.toString('utf8'), code: e ? (e.code || 1) : 0 });
   });
   if (o.input !== undefined) p.stdin.end(o.input);
@@ -30,24 +35,26 @@ const stripAnsi = s => s.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '');
 const safeTag = s => String(s).toLowerCase().replace(/[^a-z0-9._-]/g, '-').replace(/^[^a-z0-9]+/, '').slice(0, 40) || 'custom';
 
 const builds = new Map();   // tag -> in-flight build promise
+
+// Hash of everything in rom/ so editing the Dockerfile or any ROM script produces a new image tag (computed once per daemon start).
+let romHashCache = null;
+function romHash() {
+  if (romHashCache) return romHashCache;
+  const h = crypto.createHash('sha1');
+  const walk = d => { for (const n of fs.readdirSync(d).sort()) { const f = path.join(d, n); const st = fs.statSync(f); if (st.isDirectory()) walk(f); else { h.update(path.relative(ROM_DIR, f)); h.update(fs.readFileSync(f)); } } };
+  walk(ROM_DIR);
+  return (romHashCache = h.digest('hex').slice(0, 6));
+}
+
 async function ensureImage(os, customBase) {
   const base = customBase || OS[os]; if (!base) throw Object.assign(new Error(`Unsupported image "${os}"`), { status: 400 });
-  const hash = crypto.createHash('sha1').update(base).digest('hex').slice(0, 6);
+  const hash = crypto.createHash('sha1').update(base).update(romHash()).digest('hex').slice(0, 6);
   const tag = `mono-vps/${safeTag(os)}:${IMAGE_REV}-${hash}`;
   if ((await run(['image', 'inspect', tag], { soft: true })).code === 0) return tag;
   if (builds.has(tag)) return builds.get(tag);
-  // Drop-in first (it wins because sshd_config includes sshd_config.d/*.conf at the top), then the main file as a fallback.
-  const df = [
-    `FROM ${base}`,
-    'ENV DEBIAN_FRONTEND=noninteractive',
-    'RUN apt-get update && apt-get install -y --no-install-recommends openssh-server sudo curl ca-certificates wget nano git procps iproute2 iputils-ping util-linux net-tools locales findutils \\',
-    ' && mkdir -p /run/sshd /etc/ssh/sshd_config.d \\',
-    ' && printf "PermitRootLogin yes\\nPasswordAuthentication yes\\nUsePAM yes\\n" > /etc/ssh/sshd_config.d/00-monovps.conf \\',
-    " && sed -i -E 's/^#*[[:space:]]*PermitRootLogin.*/PermitRootLogin yes/; s/^#*[[:space:]]*PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config \\",
-    ' && rm -rf /var/lib/apt/lists/*',
-    'CMD ["/bin/sh","-c","mkdir -p /run/sshd && ssh-keygen -A && exec /usr/sbin/sshd -D -e"]', '',
-  ].join('\n');
-  const p = run(['build', '-t', tag, '-'], { input: df, timeout: 15 * 60000 }).then(() => tag).finally(() => builds.delete(tag));
+  // The panel waits up to 15 min for a create call, so the build must finish inside that.
+  const p = run(['build', '-t', tag, '-f', path.join(ROM_DIR, 'Dockerfile'), '--build-arg', `BASE=${base}`, ROM_DIR],
+    { timeout: 14 * 60000, maxBuffer: 64 * 1024 * 1024, tail: 4 }).then(() => tag).finally(() => builds.delete(tag));
   builds.set(tag, p); return p;
 }
 async function setPassword(id, pw) { await run(['exec', '-i', name(id), 'chpasswd'], { input: `root:${pw}\n` }); }
@@ -56,6 +63,9 @@ const statCache = new Map();    // id -> { at, val }
 
 module.exports = (cfg) => ({
   kind: 'docker',
+  /** Build the ROM image for the given OS ids in the background so the first customer does not wait for it. */
+  async prebuild(list) { for (const os of list) { try { console.log(`[monovps] pre-building ROM image for ${os}...`); console.log(`[monovps] ready: ${await ensureImage(os)}`); } catch (e) { console.error(`[monovps] pre-build of ${os} failed: ${e.message}`); } } },
+
   async info() { const v = (await run(['version', '--format', '{{.Server.Version}}'])).text.trim(); return { runtime: 'docker', version: v }; },
 
   async create(v) {
@@ -65,6 +75,7 @@ module.exports = (cfg) => ({
       '--cpus', String(v.cpu || 1), '--memory', `${v.ramMb || 1024}m`, '--memory-swap', `${v.ramMb || 1024}m`, '--pids-limit', '1024',
       '-p', `${v.sshPort}:22`, '--label', 'monovps=1'];
     if (cfg.ociRuntime) args.push('--runtime', cfg.ociRuntime);
+    else if (cfg.privileged) args.push('--privileged');   // opt-in (VPS_PRIVILEGED=true): lets Docker/Wings run inside the VPS, but root in the VPS can then escape to the host. Prefer sysbox-runc.
     let diskEnforced = !!v.diskGb;
     try {
       try { await run(v.diskGb ? [...args, '--storage-opt', `size=${v.diskGb}g`, tag] : [...args, tag]); }
