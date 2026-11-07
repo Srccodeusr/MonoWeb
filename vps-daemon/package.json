@@ -1,6 +1,6 @@
 {
   "name": "monovps-daemon",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "MonoVPS daemon: zero-dependency node agent that runs customer VPSes as Docker containers (SSH, sshx, files, exec) for the MonoWeb VPS panel",
   "private": true,
   "main": "src/index.js",
