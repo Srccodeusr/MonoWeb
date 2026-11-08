@@ -6,7 +6,7 @@ import { VpsNode } from '../../vpsTypes';
 import { adminVps } from '../vps/vpsApi';
 
 type N = Omit<VpsNode, 'secretEnc'> & { usage: { count: number; ramMb: number; diskGb: number; cpu: number } };
-const blank = { name: '', location: '', daemonHost: '', daemonPort: 3100, scheme: 'http', publicHost: '', maxVps: 20, portMin: 42000, portMax: 42999, ramMb: 0, diskGb: 0, cpus: 0, overallocatePercent: 0, enabled: true, notes: '' };
+const blank = { name: '', location: '', daemonHost: '', daemonPort: 3100, scheme: 'http', publicHost: '', maxVps: 20, portMin: 42000, portMax: 42999, ramMb: 0, diskGb: 0, cpus: 0, overallocatePercent: 0, enabled: true, discordBot: false, notes: '' };
 
 export const AdminVpsNodes: React.FC = () => {
   const [toast, say] = useToast(); const [nodes, setNodes] = useState<N[] | null>(null); const [form, setForm] = useState<any>(null); const [saving, setSaving] = useState(false);
@@ -42,7 +42,7 @@ export const AdminVpsNodes: React.FC = () => {
           return (
             <Card key={n.id} className="!p-5 space-y-3">
               <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0"><p className="text-sm font-bold text-white flex items-center gap-2 flex-wrap">{n.name}<Badge tone={n.status?.online ? 'green' : 'red'}>{n.status?.online ? 'Online' : 'Offline'}</Badge>{!n.enabled && <Badge tone="amber">Draining</Badge>}</p>
+                <div className="min-w-0"><p className="text-sm font-bold text-white flex items-center gap-2 flex-wrap">{n.name}<Badge tone={n.status?.online ? 'green' : 'red'}>{n.status?.online ? 'Online' : 'Offline'}</Badge>{!n.enabled && <Badge tone="amber">Draining</Badge>}{n.discordBot && <Badge tone="blue">Discord bot</Badge>}</p>
                   <p className="text-[11px] text-zinc-500 font-mono mt-0.5">{n.location} · {n.scheme}://{n.daemonHost}:{n.daemonPort}</p></div>
                 <div className="flex gap-1 shrink-0">
                   <Btn size="sm" busy={testing === n.id} onClick={() => test(n)}><Wifi className="h-3.5 w-3.5" />Test</Btn>
@@ -79,6 +79,7 @@ export const AdminVpsNodes: React.FC = () => {
           <Field label="Sellable disk (GB)" hint="0 = not limited"><NumInput value={form.diskGb} onChange={v => set('diskGb', v)} min={0} /></Field>
           <Field label="Sellable vCPUs" hint="0 = not limited"><NumInput value={form.cpus} onChange={v => set('cpus', v)} min={0} step={0.5} /></Field>
           <div className="self-end"><Toggle checked={form.enabled} onChange={v => set('enabled', v)} label="Accepts new VPSes" hint="Turn off to drain the node" /></div>
+          <div className="self-end"><Toggle checked={!!form.discordBot} onChange={v => set('discordBot', v)} label="Discord bot node" hint="Adds this node to the Discord Manager Bot automatically. VPSes bought in Discord are placed only on bot nodes." /></div>
           <Field label="Notes" className="sm:col-span-2"><TextArea value={form.notes || ''} onChange={e => set('notes', e.target.value)} /></Field>
         </div>}
       </Modal>
