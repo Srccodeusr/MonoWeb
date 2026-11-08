@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   ShieldAlert, Users, Package, ShoppingBag, Tag, Megaphone, LifeBuoy, FileText, Sliders, ArrowLeft, LogOut, Search, ChevronDown,
-  Sparkles, MessageSquare, Scale, Key, Link2, Mail, Network, Server, Boxes, Crown, CreditCard, Timer, Layers, UserCog, Palette, ScrollText, Menu, X, Receipt, Cloud, HardDrive, Disc3, SlidersHorizontal, History, ShoppingCart
+  Sparkles, MessageSquare, Bot, Scale, Key, Link2, Mail, Network, Server, Boxes, Crown, CreditCard, Timer, Layers, UserCog, Palette, ScrollText, Menu, X, Receipt, Cloud, HardDrive, Disc3, SlidersHorizontal, History, ShoppingCart
 } from 'lucide-react';
 import { useAuth } from '../lib/AuthContext';
 import { useBranding } from '../lib/BrandingContext';
@@ -48,6 +48,7 @@ const GROUPS: { title: string; items: Item[] }[] = [
     { page: 'admin-support', label: 'Support Desk', icon: LifeBuoy },
     { page: 'admin-mail', label: 'Mail', icon: Mail },
     { page: 'admin-discord', label: 'Discord Bot', icon: MessageSquare, tone: 'text-indigo-400' },
+    { page: 'admin-manager-bot', label: 'Discord Manager Bot', icon: Bot, tone: 'text-indigo-400' },
   ] },
   { title: 'System', items: [
     { page: 'admin-panel-link', label: 'External Panel Link', icon: Link2 },
