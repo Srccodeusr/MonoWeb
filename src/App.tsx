@@ -61,6 +61,7 @@ import { AdminSettings } from './pages/admin/AdminSettings';
 import { AdminAds } from './pages/admin/AdminAds';
 import { AdminAppearance } from './pages/admin/AdminAppearance';
 import { AdminDiscord } from './pages/admin/AdminDiscord';
+import { AdminManagerBot } from './pages/admin/AdminManagerBot';
 import { AdminLegal } from './pages/admin/AdminLegal';
 import { PanelLinkSettings } from './pages/admin/PanelLinkSettings';
 import { AdminHosting } from './pages/admin/AdminHosting';
@@ -325,6 +326,7 @@ function AppContent() {
                 {currentPage === 'admin-vps-settings' && <AdminVpsSettings />}
                 {currentPage === 'admin-vps-activity' && <AdminVpsActivity />}
                 {currentPage === 'admin-discord' && <AdminDiscord />}
+                {currentPage === 'admin-manager-bot' && <AdminManagerBot />}
                 {currentPage === 'admin-appearance' && <AdminAppearance />}
                 {currentPage === 'admin-panel-link' && <PanelLinkSettings />}
               </div>

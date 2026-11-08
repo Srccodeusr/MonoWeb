@@ -30,6 +30,8 @@ export interface VpsNode {
   cpus: number;
   overallocatePercent: number;
   enabled: boolean;            // accepts NEW VPSes (turn off to drain a node)
+  /** Handed to the Discord Manager Bot: VPSes bought in Discord are placed only on nodes with this switch on. */
+  discordBot?: boolean;
   notes?: string;
   status: VpsNodeStatus;
   createdAt: string;
@@ -108,7 +110,7 @@ export interface VpsOrder {
   paymentMethod: string;
   creditsHeld: boolean;
   billingOrderId?: string;     // linked MonoWeb Order (db.orders) so revenue and customer billing history stay in one place
-  source: 'panel' | 'checkout' | 'admin';
+  source: 'panel' | 'checkout' | 'admin' | 'bot';
   status: VpsOrderStatus;
   error?: string;
   adminNote?: string;
