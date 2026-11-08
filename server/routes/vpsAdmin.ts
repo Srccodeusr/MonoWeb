@@ -4,6 +4,7 @@ import { authMiddleware, requireRole, createAuditLog, AuthenticatedRequest } fro
 import { VpsInstance, VpsNode, VpsOsImage, VpsPlan, VpsSettings, defaultVpsSettings } from '../../src/vpsTypes';
 import { encryptSecret, newId, randomPassword, randomToken } from '../hosting/crypto';
 import { publicBaseUrl } from '../hosting/billing';
+import { onNodesChanged } from '../bot/nodes';
 import { VpsDaemonError, pingVpsNode, vpsDaemon, vpsInstallCommands } from '../vps/daemonClient';
 import {
   Db, VpsError, addDays, destroyVps, dpath, extendVps, forgetLive, fulfilDeployOrder, imageById, liveState, logVpsEvent, mailUser, nodeOf, nodeUsage, pickImage, provisionVps,
@@ -69,7 +70,7 @@ function sanitizeNode(b: any, base?: VpsNode): Omit<VpsNode, 'id' | 'secretEnc' 
     daemonPort: Math.round(num(g('daemonPort', 3100), 3100)), scheme: g('scheme', 'http') === 'https' ? 'https' as const : 'http' as const, publicHost: str(g('publicHost', ''), '', 200),
     maxVps: Math.max(0, Math.round(num(g('maxVps', 20), 20))), portMin: Math.round(num(g('portMin', 42000), 42000)), portMax: Math.round(num(g('portMax', 42999), 42999)),
     ramMb: Math.max(0, Math.round(num(g('ramMb', 0), 0))), diskGb: Math.max(0, Math.round(num(g('diskGb', 0), 0))), cpus: Math.max(0, num(g('cpus', 0), 0)), overallocatePercent: Math.min(500, Math.max(0, Math.round(num(g('overallocatePercent', 0), 0)))),
-    enabled: bool(g('enabled', true), true), notes: str(g('notes', ''), '', 500),
+    enabled: bool(g('enabled', true), true), discordBot: bool(g('discordBot', false), false), notes: str(g('notes', ''), '', 500),
   };
   if (!n.name) bad('Give the node a name.');
   if (!/^[\w.-]+$/.test(n.daemonHost)) bad('Enter the daemon address as a hostname or IPv4 address.');
@@ -86,7 +87,7 @@ router.post('/nodes', wrap(async (req, res) => {
   for (const o of db.vpsNodes) if (o.daemonHost === clean.daemonHost && o.daemonPort === clean.daemonPort) bad('A node with this address and port already exists.');
   const secret = randomToken(36);
   const node: VpsNode = { id: newId('vnode'), ...clean, secretEnc: encryptSecret(secret), status: { online: false }, createdAt: new Date().toISOString() };
-  db.vpsNodes.push(node); saveDbSync(); await audit(req, 'VPS_NODE_CREATED', node.id, `Added VPS node ${node.name}`);
+  db.vpsNodes.push(node); saveDbSync(); await audit(req, 'VPS_NODE_CREATED', node.id, `Added VPS node ${node.name}`); await onNodesChanged();   // bot nodes are handed to the Discord bot automatically
   const panelUrl = publicBaseUrl(req as any);
   res.status(201).json({ success: true, data: { node: nodeOut(db, node), secret, panelUrl, ...vpsInstallCommands(panelUrl, secret, node.daemonPort) } });
 }));
@@ -96,7 +97,7 @@ router.put('/nodes/:id', wrap(async (req, res) => {
   const clean = sanitizeNode(req.body, n);
   const outside = db.vpsServers.filter(v => v.nodeId === n.id && (v.sshPort < clean.portMin || v.sshPort > clean.portMax)).length;
   if (outside) bad(`${outside} VPS(es) on this node use SSH ports outside the new range.`);
-  Object.assign(n, clean); saveDbSync(); await audit(req, 'VPS_NODE_UPDATED', n.id, `Updated VPS node ${n.name}`); ok(res, nodeOut(db, n));
+  Object.assign(n, clean); saveDbSync(); await audit(req, 'VPS_NODE_UPDATED', n.id, `Updated VPS node ${n.name}`); await onNodesChanged(); ok(res, nodeOut(db, n));
 }));
 
 router.post('/nodes/:id/rotate-secret', wrap(async (req, res) => {
@@ -140,7 +141,7 @@ router.post('/nodes/:id/prune', wrap(async (req, res) => {
 router.delete('/nodes/:id', wrap(async (req, res) => {
   const db = await getDb(); const n = db.vpsNodes.find(x => x.id === req.params.id); if (!n) throw new VpsError(404, 'Node not found.');
   if (db.vpsServers.some(v => v.nodeId === n.id)) throw new VpsError(409, 'This node still hosts VPSes. Delete them first.', 'NODE_IN_USE');
-  db.vpsNodes = db.vpsNodes.filter(x => x.id !== n.id); saveDbSync(); await audit(req, 'VPS_NODE_DELETED', n.id, n.name); ok(res);
+  db.vpsNodes = db.vpsNodes.filter(x => x.id !== n.id); saveDbSync(); await audit(req, 'VPS_NODE_DELETED', n.id, n.name); await onNodesChanged(); ok(res);
 }));
 router.post('/refresh', wrap(async (_req, res) => { await refreshVpsNodes(); const db = await getDb(); ok(res, db.vpsNodes.map(n => nodeOut(db, n))); }));
 
